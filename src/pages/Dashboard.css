@@ -1,0 +1,23 @@
+.dashboard-page{padding:48px 0 80px}
+
+.dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.dash-stat-card{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:28px 16px}
+.dash-stat-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(37,99,235,.08);color:var(--primary)}
+.dash-stat-value{font-size:1.75rem;font-weight:800}
+.dash-stat-label{font-size:.875rem;color:var(--text-secondary)}
+
+.dash-chart{padding:28px}
+.dash-chart h3{font-size:1.125rem;font-weight:700;margin-bottom:20px}
+.chart-bars{display:flex;flex-direction:column;gap:16px}
+.chart-bar-row{display:flex;align-items:center;gap:12px}
+.chart-label{width:90px;font-size:.875rem;font-weight:500;text-align:right;flex-shrink:0}
+.chart-bar-track{flex:1;height:24px;background:var(--border);border-radius:12px;overflow:hidden}
+.chart-bar-fill{height:100%;border-radius:12px;min-width:0}
+.chart-value{width:80px;font-size:.8125rem;color:var(--text-secondary);flex-shrink:0}
+
+@media(max-width:768px){
+  .dash-stats{grid-template-columns:repeat(2,1fr)}
+  .chart-bar-row{flex-wrap:wrap}
+  .chart-label{width:100%;text-align:left}
+  .chart-value{width:100%;text-align:right}
+}

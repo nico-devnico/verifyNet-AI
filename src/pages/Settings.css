@@ -1,0 +1,12 @@
+.settings-page{padding:48px 0 80px}
+.container-sm{max-width:640px}
+.settings-group{display:flex;flex-direction:column;gap:12px}
+.settings-card{padding:20px 24px}
+.setting-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.setting-row h3{font-size:1rem;font-weight:600;margin-bottom:2px}
+.setting-row p{font-size:.875rem;color:var(--text-secondary)}
+
+.toggle-switch{width:48px;height:28px;background:var(--border);border-radius:14px;position:relative;cursor:pointer;transition:var(--transition);flex-shrink:0}
+.toggle-switch.active{background:var(--primary)}
+.toggle-knob{position:absolute;top:3px;left:3px;width:22px;height:22px;background:#fff;border-radius:50%;transition:var(--transition);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle-switch.active .toggle-knob{left:23px}

@@ -1,0 +1,32 @@
+.analyze-page{padding:48px 0 80px;min-height:calc(100vh - 64px)}
+.analyze-header{text-align:center;margin-bottom:40px}
+.analyze-header h1{font-size:2.25rem;font-weight:800;margin-bottom:8px}
+.analyze-header p{color:var(--text-secondary);font-size:1.0625rem}
+
+.analyze-form{max-width:720px;margin:0 auto}
+.tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:4px;margin-bottom:20px}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:calc(var(--radius) - 4px);font-weight:600;font-size:.9375rem;color:var(--text-secondary);transition:var(--transition)}
+.tab:hover{color:var(--text)}
+.tab.active{background:var(--bg);color:var(--primary);box-shadow:var(--shadow)}
+
+.input-area{display:flex;flex-direction:column;gap:16px}
+.text-input{width:100%;padding:20px;background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);font-size:1rem;line-height:1.6;color:var(--text);resize:vertical;transition:var(--transition);min-height:200px}
+.text-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.text-input::placeholder{color:var(--text-muted)}
+
+.url-input-wrapper{display:flex;align-items:center;gap:12px;padding:16px 20px;background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);transition:var(--transition)}
+.url-input-wrapper:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.url-input-icon{flex-shrink:0;color:var(--text-muted)}
+.url-input{flex:1;font-size:1.0625rem;color:var(--text);background:transparent}
+.url-input::placeholder{color:var(--text-muted)}
+
+.error-msg{color:var(--danger);font-size:.875rem;font-weight:500;padding:8px 12px;background:rgba(239,68,68,.08);border-radius:var(--radius)}
+
+.form-actions{display:flex;align-items:center;gap:16px}
+.char-count{color:var(--text-muted);font-size:.8125rem}
+
+@media(max-width:768px){
+  .analyze-header h1{font-size:1.75rem}
+  .form-actions{flex-direction:column;align-items:stretch}
+  .form-actions .btn{width:100%}
+}

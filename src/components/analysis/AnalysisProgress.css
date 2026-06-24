@@ -1,0 +1,19 @@
+.analysis-progress{max-width:500px;margin:40px auto}
+.progress-card{text-align:center;padding:48px 32px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl)}
+.progress-visual{margin-bottom:24px}
+.progress-ring{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.progress-ring svg{position:absolute}
+.progress-percent{font-size:1.75rem;font-weight:800;color:var(--primary)}
+.progress-step{font-size:1.0625rem;font-weight:600;color:var(--text);margin-bottom:28px}
+
+.progress-steps{display:flex;flex-direction:column;gap:12px;margin-bottom:24px;text-align:left}
+.progress-step-item{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:var(--radius);transition:var(--transition)}
+.progress-step-item.done{opacity:.6}
+.progress-step-item.active{background:rgba(37,99,235,.06)}
+.step-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
+.step-icon-svg{color:var(--text-muted)}
+.step-spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+.step-label{font-size:.9375rem;font-weight:500}
+
+.progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--primary),#7c3aed);border-radius:3px}

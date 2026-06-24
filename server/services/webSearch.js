@@ -1,0 +1,239 @@
+const { getJson } = require('serpapi');
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
+
+// Reliable sources list as per your specifications
+const RELIABLE_SOURCES = {
+  high: [
+    // 🟢 Sources très fiables - Internationales
+    'reuters.com',
+    'apnews.com',
+    'bbc.com',
+    'bbc.co.uk',
+    'ft.com',
+    'aljazeera.com',
+    'lemonde.fr',
+    'theguardian.com',
+    'dw.com',
+    // 🟢 Sources Camerounaises reconnues
+    'cameroon-tribune.cm',
+    'journalducameroun.com',
+    'actucameroun.com',
+    'cameroon-info.net',
+    'crtv.cm',
+    'ecomatin.net',
+    // 🟢 Médias panafricains
+    'africanews.com',
+    'jeuneafrique.com',
+    'theafricareport.com',
+    'allafrica.com',
+    'africaintelligence.com',
+    'radiookapi.org',
+    'gabonreview.com',
+    'agi.africa',
+  ],
+  institutional: [
+    // 🟡 Sources institutionnelles/officielles - Internationales
+    'who.int',
+    'unesco.org',
+    'worldbank.org',
+    'imf.org',
+    'gouv.fr',
+    'gov.uk',
+    'whitehouse.gov',
+    'us.gov',
+    'europa.eu',
+    'un.org',
+    // 🟡 Sources gouvernementales et officielles du Cameroun
+    'prc.cm', // Présidence de la République du Cameroun
+    'spm.gov.cm', // Services du Premier Ministre
+    'minsante.cm', // Ministère de la Santé Publique
+    'mincom.gov.cm', // Ministère de la Communication
+    'minebas.gov.cm', // Ministère de l'Éducation de Base
+    'minesec.gov.cm', // Ministère des Enseignements Secondaires
+    'elecam.cm', // Elections Cameroon (ELECAM)
+  ],
+  scientific: [
+    // 🟠 Sources techniques et scientifiques
+    'scholar.google.com',
+    'nature.com',
+    'sciencedirect.com',
+    'ieee.org',
+    'arxiv.org',
+  ],
+  factchecking: [
+    // 🔵 Sources de vérification et fact-checking - Internationales
+    'snopes.com',
+    'politifact.com',
+    'factcheck.org',
+    'factcheck.afp.com',
+    'fullfact.org',
+    // 🔵 Organismes Africains de Fact-Checking
+    'africacheck.org',
+    'pesacheck.org',
+    'dubawa.org',
+  ],
+  useWithCaution: [
+    // 🔴 Sources à utiliser avec prudence
+    'reddit.com',
+    'wikipedia.org',
+  ],
+};
+
+function generateSearchQueries(claim, mainTopic, country) {
+  const queries = [];
+  
+  // Use mainTopic as fallback
+  let searchQuery = claim;
+  if (!searchQuery || searchQuery === 'null' || searchQuery.trim() === '') {
+    searchQuery = mainTopic;
+  }
+  
+  // Add main query
+  if (country) {
+    queries.push(`${country} ${searchQuery}`);
+  } else {
+    queries.push(searchQuery);
+  }
+  
+  // Add related queries for context
+  if (mainTopic) {
+    queries.push(`${mainTopic} actualités`);
+    queries.push(`${mainTopic} vérification`);
+  }
+  
+  // Add fact-checking focused queries
+  queries.push(`${searchQuery} vérification`);
+  queries.push(`${searchQuery} fact check`);
+  
+  return queries;
+}
+
+async function fetchPageContent(url) {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const html = await response.text();
+    const dom = new JSDOM(html, { url });
+    const reader = new Readability(dom.window.document);
+    const article = reader.parse();
+    
+    return article ? article.textContent.slice(0, 8000) : null;
+  } catch (error) {
+    console.error(`[WebSearch] Error fetching ${url}:`, error.message);
+    return null;
+  }
+}
+
+async function searchWeb(claim, mainTopic, country) {
+  // Fallback: use mainTopic if claim is invalid
+  let searchClaim = claim;
+  if (!searchClaim || searchClaim === 'null' || searchClaim.trim() === '') {
+    searchClaim = mainTopic;
+  }
+  
+  const queries = generateSearchQueries(searchClaim, mainTopic, country);
+  const apiKey = process.env.SERPAPI_KEY;
+  
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error(
+      'API de recherche requise. Veuillez ajouter une clé SerpAPI valide dans le fichier .env (obtenez-en une gratuitement sur https://serpapi.com/).'
+    );
+  }
+  
+  let allResults = [];
+  
+  console.log(`[WebSearch] Performing real search for claim: "${claim}"`);
+  
+  // Search for multiple queries (limit to 4 queries to stay within free tier)
+  for (let qIndex = 0; qIndex < Math.min(queries.length, 4); qIndex++) {
+    const query = queries[qIndex];
+    
+    try {
+      const searchResult = await getJson({
+        q: query,
+        api_key: apiKey,
+        num: 15, // More results per query
+        hl: 'fr',
+        gl: 'fr',
+      });
+      
+      if (searchResult.organic_results) {
+        allResults = allResults.concat(
+          searchResult.organic_results.map(result => {
+            const domain = new URL(result.link).hostname;
+            
+            // Determine source reliability tier
+            let reliability = 'useWithCaution';
+            if (RELIABLE_SOURCES.high.some(s => domain.includes(s))) {
+              reliability = 'high';
+            } else if (RELIABLE_SOURCES.institutional.some(s => domain.includes(s))) {
+              reliability = 'institutional';
+            } else if (RELIABLE_SOURCES.scientific.some(s => domain.includes(s))) {
+              reliability = 'scientific';
+            } else if (RELIABLE_SOURCES.factchecking.some(s => domain.includes(s))) {
+              reliability = 'factchecking';
+            }
+            
+            return {
+              title: result.title,
+              domain,
+              url: result.link,
+              snippet: result.snippet,
+              position: result.position,
+              reliability,
+              date: result.date || null,
+            };
+          })
+        );
+      }
+    } catch (searchError) {
+      console.error(`[WebSearch] Error searching for "${query}":`, searchError.message);
+    }
+  }
+  
+  // Deduplicate results by URL
+  const seenUrls = new Set();
+  const uniqueResults = allResults.filter(result => {
+    if (seenUrls.has(result.url)) return false;
+    seenUrls.add(result.url);
+    return true;
+  });
+  
+  // Separate reliable sources from others
+  const reliableResults = uniqueResults.filter(result => 
+    ['high', 'institutional', 'scientific', 'factchecking'].includes(result.reliability)
+  ).slice(0, 25);
+  
+  const otherResults = uniqueResults.filter(result => 
+    !reliableResults.some(r => r.url === result.url)
+  ).slice(0, 25);
+  
+  if (reliableResults.length === 0 && otherResults.length === 0) {
+    throw new Error(
+      'Aucun résultat de recherche trouvé. Veuillez reformuler votre demande ou vérifier votre connexion internet.'
+    );
+  }
+  
+  return {
+    reliableSources: reliableResults,
+    otherSources: otherResults,
+    allSources: uniqueResults.slice(0, 50),
+    circulatingOn: [
+      { site: 'facebook.com', type: 'social' },
+      { site: 'twitter.com', type: 'social' },
+    ],
+    firstAppearance: 'Date inconnue (nécessite analyse temporelle approfondie)',
+  };
+}
+
+module.exports = { searchWeb, RELIABLE_SOURCES, generateSearchQueries };
