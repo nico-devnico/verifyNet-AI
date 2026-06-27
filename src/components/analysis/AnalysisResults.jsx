@@ -4,6 +4,7 @@ import { FileText, Search, CheckCircle2, RotateCcw, AlertTriangle, Shield, Globe
 import { getScoreClassification, getScoreColor } from '../../utils/helpers';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import useStore from '../../store';
 import './AnalysisResults.css';
 
 const fadeIn = (delay = 0) => ({ initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay, duration: 0.5 } });
