@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, Users, Settings, Save, Trash2, Loader2 } from 'lucide-react';
+import { Shield, Users, Settings, Save, Trash2, Loader2, Crown } from 'lucide-react';
 import useStore from '../store';
 import { supabase } from '../lib/supabase';
 import './Admin.css';
 
 export default function Admin() {
-  const { user, profile, isAdmin } = useStore();
+  const { user, profile, isAdmin, isSuperAdmin } = useStore();
   const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [settings, setSettings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const SUPER_ADMIN_EMAIL = 'nicodevnico@gmail.com';
 
   useEffect(() => {
     if (activeTab === 'users') {
@@ -54,6 +56,13 @@ export default function Admin() {
   };
 
   const toggleUserRole = async (userId, currentRole) => {
+    // Vérifier si on ne touche pas le super admin
+    const targetUser = users.find(u => u.id === userId);
+    if (targetUser && targetUser.email === SUPER_ADMIN_EMAIL) {
+      alert('Impossible de modifier le rôle du super administrateur !');
+      return;
+    }
+
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
     try {
       const { error } = await supabase
@@ -68,6 +77,7 @@ export default function Admin() {
       ));
     } catch (err) {
       console.error('Error updating role:', err);
+      alert('Erreur lors de la modification du rôle : ' + err.message);
     }
   };
 
@@ -84,12 +94,25 @@ export default function Admin() {
     }
   };
 
+  const getRoleLabel = (role) => {
+    switch(role) {
+      case 'super_admin': return 'Super Administrateur';
+      case 'admin': return 'Administrateur';
+      default: return 'Utilisateur';
+    }
+  };
+
   return (
     <div className="admin-page">
       <div className="container">
         <motion.div className="page-header" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="admin-title">
             <Shield size={28} /> Administration
+            {isSuperAdmin() && (
+              <span className="super-admin-badge">
+                <Crown size={18} /> Super Admin
+              </span>
+            )}
           </h1>
           <p>Gérez les utilisateurs et les paramètres de la plateforme</p>
         </motion.div>
@@ -136,14 +159,16 @@ export default function Admin() {
                     </thead>
                     <tbody>
                       {users.map(userItem => (
-                        <tr key={userItem.id}>
+                        <tr key={userItem.id} className={userItem.email === SUPER_ADMIN_EMAIL ? 'super-admin-row' : ''}>
                           <td className="email-cell">{userItem.email}</td>
                           <td>
                             {[userItem.first_name, userItem.last_name].filter(Boolean).join(' ') || userItem.username || '-'}
+                            {userItem.email === SUPER_ADMIN_EMAIL && <span className="super-admin-indicator">👑</span>}
                           </td>
                           <td>
                             <span className={`role-badge role-${userItem.role}`}>
-                              {userItem.role === 'admin' ? 'Administrateur' : 'Utilisateur'}
+                              {userItem.role === 'super_admin' && <Crown size={12} className="crown-icon" />}
+                              {getRoleLabel(userItem.role)}
                             </span>
                           </td>
                           <td>
@@ -155,12 +180,16 @@ export default function Admin() {
                             {new Date(userItem.created_at).toLocaleDateString('fr-FR')}
                           </td>
                           <td>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => toggleUserRole(userItem.id, userItem.role)}
-                            >
-                              {userItem.role === 'admin' ? 'Rétrograder' : 'Promouvoir'}
-                            </button>
+                            {userItem.email === SUPER_ADMIN_EMAIL ? (
+                              <span className="protected-label">Protégé</span>
+                            ) : (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => toggleUserRole(userItem.id, userItem.role)}
+                              >
+                                {userItem.role === 'admin' || userItem.role === 'super_admin' ? 'Rétrograder' : 'Promouvoir'}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}

@@ -1,5 +1,5 @@
 -- ========================================================
--- VerifyNet - Schéma de base de données Supabase complet (Production Ready)
+-- VerifyNet - Schéma de base de données Supabase complet (Production Ready + Super Admin)
 -- ========================================================
 
 -- ========================================================
@@ -13,7 +13,18 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ========================================================
--- 2. Fonction utilitaire pour vérifier le rôle admin
+-- 2. Constantes du système
+-- ========================================================
+-- ID unique et permanent du super-administrateur
+CREATE OR REPLACE FUNCTION public.get_super_admin_email()
+RETURNS TEXT AS $$
+BEGIN
+    RETURN 'nicodevnico@gmail.com';
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- ========================================================
+-- 3. Fonction utilitaire pour vérifier le rôle admin
 -- ========================================================
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
@@ -24,12 +35,28 @@ BEGIN
     FROM public.profiles 
     WHERE id = auth.uid();
     
-    RETURN COALESCE(user_role = 'admin', false);
+    RETURN COALESCE(user_role IN ('admin', 'super_admin'), false);
 END;
 $$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER;
 
 -- ========================================================
--- 3. Fonction trigger pour updated_at
+-- 4. Fonction pour vérifier si l'utilisateur est super admin
+-- ========================================================
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN AS $$
+DECLARE
+    user_email TEXT;
+BEGIN
+    SELECT email INTO user_email 
+    FROM public.profiles 
+    WHERE id = auth.uid();
+    
+    RETURN COALESCE(user_email = public.get_super_admin_email(), false);
+END;
+$$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER;
+
+-- ========================================================
+-- 5. Fonction trigger pour updated_at
 -- ========================================================
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
@@ -40,37 +67,98 @@ END;
 $$ LANGUAGE plpgsql VOLATILE;
 
 -- ========================================================
--- 4. Fonction trigger pour création profil lors de l'inscription
+-- 6. Fonction trigger pour création profil lors de l'inscription
 -- ========================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Insérer le profil utilisateur
-    INSERT INTO public.profiles (id, email, role, created_at, updated_at)
-    VALUES (
-        NEW.id,
-        NEW.email,
-        'user',
-        TIMEZONE('utc'::text, NOW()),
-        TIMEZONE('utc'::text, NOW())
-    );
+    -- Déterminer le rôle en fonction de l'email
+    DECLARE
+        user_role TEXT;
+    BEGIN
+        IF NEW.email = public.get_super_admin_email() THEN
+            user_role := 'super_admin';
+        ELSE
+            user_role := 'user';
+        END IF;
 
-    -- Insérer les préférences par défaut
-    INSERT INTO public.user_preferences (user_id, theme, language, created_at, updated_at)
-    VALUES (
-        NEW.id,
-        'light',
-        'fr',
-        TIMEZONE('utc'::text, NOW()),
-        TIMEZONE('utc'::text, NOW())
-    );
+        -- Insérer le profil utilisateur
+        INSERT INTO public.profiles (id, email, role, username, is_verified, created_at, updated_at)
+        VALUES (
+            NEW.id,
+            NEW.email,
+            user_role,
+            CASE WHEN NEW.email = public.get_super_admin_email() THEN 'nico-Admin' ELSE NULL END,
+            CASE WHEN NEW.email = public.get_super_admin_email() THEN true ELSE false END,
+            TIMEZONE('utc'::text, NOW()),
+            TIMEZONE('utc'::text, NOW())
+        );
 
-    RETURN NEW;
+        -- Insérer les préférences par défaut
+        INSERT INTO public.user_preferences (user_id, theme, language, created_at, updated_at)
+        VALUES (
+            NEW.id,
+            'dark',
+            'fr',
+            TIMEZONE('utc'::text, NOW()),
+            TIMEZONE('utc'::text, NOW())
+        );
+
+        -- Loguer la création
+        IF NEW.email = public.get_super_admin_email() THEN
+            INSERT INTO public.activity_logs (user_id, action, details, created_at)
+            VALUES (
+                NEW.id,
+                'SUPER_ADMIN_CREATED',
+                jsonb_build_object('email', NEW.email, 'username', 'nico-Admin'),
+                TIMEZONE('utc'::text, NOW())
+            );
+        END IF;
+
+        RETURN NEW;
+    END;
 END;
 $$ LANGUAGE plpgsql VOLATILE;
 
 -- ========================================================
--- 5. Table des profils utilisateurs
+-- 7. Trigger pour protéger le super admin (modification/suppression)
+-- ========================================================
+CREATE OR REPLACE FUNCTION public.protect_super_admin()
+RETURNS TRIGGER AS $$
+DECLARE
+    super_admin_email TEXT;
+BEGIN
+    super_admin_email := public.get_super_admin_email();
+
+    -- Protection contre la suppression
+    IF (TG_OP = 'DELETE') THEN
+        IF OLD.email = super_admin_email THEN
+            RAISE EXCEPTION 'Impossible de supprimer le compte super administrateur';
+        END IF;
+        RETURN OLD;
+    END IF;
+
+    -- Protection contre la modification
+    IF (TG_OP = 'UPDATE') THEN
+        IF OLD.email = super_admin_email THEN
+            -- Interdire le changement de rôle ou d'email
+            IF NEW.role != 'super_admin' OR NEW.email != OLD.email THEN
+                RAISE EXCEPTION 'Impossible de modifier le rôle ou l''email du super administrateur';
+            END IF;
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF (TG_OP = 'INSERT') THEN
+        RETURN NEW;
+    END IF;
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql VOLATILE;
+
+-- ========================================================
+-- 8. Table des profils utilisateurs
 -- ========================================================
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -80,7 +168,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     username TEXT,
     avatar_url TEXT,
     bio TEXT,
-    role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin', 'super_admin')),
     is_verified BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
@@ -98,6 +186,12 @@ CREATE TRIGGER set_profiles_updated_at
     BEFORE UPDATE ON public.profiles 
     FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 
+-- Trigger pour protéger le super admin
+DROP TRIGGER IF EXISTS protect_super_admin_trigger ON public.profiles;
+CREATE TRIGGER protect_super_admin_trigger
+    BEFORE UPDATE OR DELETE ON public.profiles
+    FOR EACH ROW EXECUTE FUNCTION protect_super_admin();
+
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
@@ -110,20 +204,28 @@ CREATE POLICY "Les utilisateurs peuvent mettre à jour leur propre profil"
     ON public.profiles FOR UPDATE 
     USING (auth.uid() = id);
 
-CREATE POLICY "Les admins peuvent mettre à jour tous les profils" 
+CREATE POLICY "Les admins peuvent mettre à jour tous les profils (sauf super admin)" 
     ON public.profiles FOR UPDATE 
-    USING (public.is_admin());
+    USING (public.is_admin() AND email != public.get_super_admin_email());
+
+CREATE POLICY "Les super admins peuvent mettre à jour tous les profils" 
+    ON public.profiles FOR UPDATE 
+    USING (public.is_super_admin());
 
 CREATE POLICY "Les admins peuvent insérer des profils" 
     ON public.profiles FOR INSERT 
     WITH CHECK (public.is_admin());
 
-CREATE POLICY "Les admins peuvent supprimer des profils" 
+CREATE POLICY "Les admins peuvent supprimer des profils (sauf super admin)" 
     ON public.profiles FOR DELETE 
-    USING (public.is_admin());
+    USING (public.is_admin() AND email != public.get_super_admin_email());
+
+CREATE POLICY "Les super admins peuvent supprimer tous les profils" 
+    ON public.profiles FOR DELETE 
+    USING (public.is_super_admin());
 
 -- ========================================================
--- 6. Table des analyses sauvegardées
+-- 9. Table des analyses sauvegardées
 -- ========================================================
 CREATE TABLE IF NOT EXISTS public.analyses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -170,7 +272,7 @@ CREATE POLICY "Les utilisateurs peuvent supprimer leurs propres analyses"
     USING (auth.uid() = user_id OR public.is_admin());
 
 -- ========================================================
--- 7. Table des préférences utilisateur
+-- 10. Table des préférences utilisateur
 -- ========================================================
 CREATE TABLE IF NOT EXISTS public.user_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -197,7 +299,7 @@ CREATE POLICY "Les utilisateurs peuvent accéder à leurs propres préférences"
     USING (auth.uid() = user_id);
 
 -- ========================================================
--- 8. Table des paramètres du système (pour l'admin)
+-- 11. Table des paramètres du système (pour l'admin)
 -- ========================================================
 CREATE TABLE IF NOT EXISTS public.system_settings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -231,7 +333,7 @@ INSERT INTO public.system_settings (key, value, description) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 -- ========================================================
--- 9. Table des logs d'activité
+-- 12. Table des logs d'activité
 -- ========================================================
 CREATE TABLE IF NOT EXISTS public.activity_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -261,7 +363,7 @@ CREATE POLICY "Tout le monde peut insérer des logs"
     WITH CHECK (true);
 
 -- ========================================================
--- 10. Trigger sur auth.users pour créer profil automatiquement
+-- 13. Trigger sur auth.users pour créer profil automatiquement
 -- ========================================================
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created 
@@ -269,7 +371,7 @@ CREATE TRIGGER on_auth_user_created
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ========================================================
--- 11. Attributions des droits
+-- 14. Attributions des droits
 -- ========================================================
 -- Donner accès au schéma public
 GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;

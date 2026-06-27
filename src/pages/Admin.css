@@ -24,6 +24,12 @@
 .role-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:.75rem;font-weight:700}
 .role-user{background:rgba(20,184,166,.1);color:var(--primary)}
 .role-admin{background:rgba(212,175,55,.15);color:#d4af37}
+.role-super_admin{background:linear-gradient(135deg,rgba(212,175,55,.2),rgba(255,215,0,.25));color:#d4af37;border:1px solid rgba(212,175,55,.3)}
+.crown-icon{display:inline-flex;margin-right:4px}
+.super-admin-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;background:linear-gradient(135deg,#d4af37,#ffd700);color:#09090b;font-size:.75rem;font-weight:800;margin-left:12px}
+.super-admin-row{background:linear-gradient(90deg,rgba(212,175,55,.03),transparent) !important}
+.super-admin-indicator{font-size:1.125rem;margin-left:8px}
+.protected-label{display:inline-block;padding:6px 12px;border-radius:8px;background:rgba(212,175,55,.1);color:#d4af37;font-weight:700;font-size:.8125rem}
 .verified-badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:600}
 .verified-badge.yes{background:rgba(22,163,74,.1);color:#16a34a}
 .verified-badge.no{background:rgba(239,68,68,.1);color:#ef4444}

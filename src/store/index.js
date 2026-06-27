@@ -42,10 +42,16 @@ const useStore = create(
         set({ user: null, session: null, profile: null });
       },
 
-      // Check if user is admin
+      // Check if user is admin or super admin
       isAdmin: () => {
         const { profile } = get();
-        return profile?.role === 'admin';
+        return profile?.role === 'admin' || profile?.role === 'super_admin';
+      },
+      
+      // Check if user is super admin
+      isSuperAdmin: () => {
+        const { profile } = get();
+        return profile?.role === 'super_admin';
       },
 
       // History
