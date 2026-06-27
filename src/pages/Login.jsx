@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, LogIn } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -13,11 +13,15 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useStore();
+
+  // Get the redirect path from location state or default to /dashboard
+  const from = location.state?.from?.pathname || '/dashboard';
 
   // Redirect if already logged in
   if (user) {
-    navigate('/dashboard');
+    navigate(from, { replace: true });
     return null;
   }
 
@@ -33,7 +37,7 @@ export default function Login() {
       });
 
       if (error) throw error;
-      navigate('/dashboard');
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -47,15 +51,16 @@ export default function Login() {
 
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}${from}`,
+        },
+      });
 
-    if (error) throw error;
+      if (error) throw error;
     } catch (err) {
       setError(err.message);
+    } finally {
       setLoading(false);
     }
   };
