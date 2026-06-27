@@ -120,7 +120,7 @@ const generatePDF = (data) => {
         // Titre de la source
         doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(20, 184, 166); // Couleur primaire
+        // doc.setTextColor(20, 184, 166); // Couleur primaire
         
         const titleText = source.title?.substring(0, 80) || 'Sans titre';
         doc.text(titleText, 14, yPosition);
@@ -139,7 +139,7 @@ const generatePDF = (data) => {
         // Domaine et fiabilité
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 100, 100);
+        // doc.setTextColor(100, 100, 100);
         
         const metaText = `${source.domain || 'N/A'} - ${source.reliabilityLabel || 'Fiabilité inconnue'}`;
         doc.text(metaText, 14, yPosition);
@@ -148,7 +148,7 @@ const generatePDF = (data) => {
         // URL complète
         if (source.url) {
           doc.setFontSize(8);
-          doc.setTextColor(60, 120, 216); // Bleu pour les liens
+          // doc.setTextColor(60, 120, 216); // Bleu pour les liens
           const urlText = source.url.length > 80 ? source.url.substring(0, 80) + '...' : source.url;
           doc.text(urlText, 14, yPosition);
           yPosition += 10;
@@ -161,7 +161,7 @@ const generatePDF = (data) => {
       if (consultedSources.length > 10) {
         if (yPosition > 275) { doc.addPage(); yPosition = 20; }
         doc.setFontSize(9);
-        doc.setTextColor(100, 100, 100);
+        // doc.setTextColor(100, 100, 100);
         doc.text(`... et ${consultedSources.length - 10} autres sources consultées (voir la page web pour la liste complète)`, 14, yPosition);
       }
     }
@@ -200,7 +200,14 @@ export default function AnalysisResults({ data, onReset }) {
   const classification = getScoreClassification(score);
   const scoreColor = getScoreColor(score);
 
+  const { user } = useStore(); // Add this to get the user from store
+
   const handleDownloadPDF = () => {
+    if (!user) {
+      setPdfError('Veuillez vous connecter pour télécharger le PDF.');
+      return;
+    }
+    
     setPdfError('');
     try {
       generatePDF(data);
@@ -471,7 +478,21 @@ export default function AnalysisResults({ data, onReset }) {
             {pdfError}
           </div>
         )}
-        <button className="btn btn-secondary btn-lg" onClick={handleDownloadPDF}><Download size={18} /> Télécharger le rapport PDF</button>
+        {user && (
+          <button className="btn btn-secondary btn-lg" onClick={handleDownloadPDF}><Download size={18} /> Télécharger le rapport PDF</button>
+        )}
+        {!user && (
+          <div style={{ 
+            color: 'var(--text-secondary)', 
+            padding: '12px 16px', 
+            borderRadius: '8px', 
+            background: 'var(--surface)', 
+            border: '1px solid var(--border)',
+            fontSize: '0.9375rem'
+          }}>
+            ⚠️ Veuillez vous connecter pour télécharger le rapport PDF.
+          </div>
+        )}
         <button className="btn btn-primary btn-lg" onClick={onReset}><RotateCcw size={18} /> Nouvelle analyse</button>
       </motion.div>
     </motion.div>
