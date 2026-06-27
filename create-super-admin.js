@@ -10,7 +10,7 @@
 const { createClient } = require('@supabase/supabase-js');
 
 // Configuration - REMPLACEZ CES VALEURS PAR LES VÔTRES !
-const SUPABASE_URL = process.env.SUPABASE_URL || 'VOTRE_URL_SUPABASE';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lvqvlydzfcuhiyxpadsr.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'VOTRE_CLE_SERVICE_ROLE';
 
 // Paramètres du super admin
