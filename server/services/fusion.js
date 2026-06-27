@@ -1,5 +1,5 @@
 const Groq = require('groq-sdk');
-const { searchWeb, RELIABLE_SOURCES } = require('./webSearch');
+const { searchWeb, RELIABLE_SOURCES, fetchPageContent } = require('./webSearch');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
@@ -17,7 +17,7 @@ function clamp(v) {
   return Math.max(0, Math.min(100, Math.round(v)));
 }
 
-async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048) {
+async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048, requireJson = true) {
   let lastError;
 
   // Truncate user message to prevent "Request too large" errors
@@ -37,29 +37,34 @@ async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048
         temperature: 0.1,
         max_tokens: Math.min(maxTokens, 2048), // Reduced from 3500
         top_p: 0.9,
-        response_format: { type: 'json_object' },
+        response_format: requireJson ? { type: 'json_object' } : undefined,
       });
       
       let text = completion.choices[0]?.message?.content;
       if (!text) throw new Error('Empty response');
       
-      // Clean response
-      text = text
-        .replace(/<think>[\s\S]*?<\/think>/gi, '')
-        .replace(/<tool>[\s\S]*?<\/tool>/gi, '')
-        .replace(/<output>[\s\S]*?<\/output>/gi, '')
-        .replace(/```json|```/gi, '')
-        .trim();
-      
-      // Extract valid JSON
-      const firstBrace = text.indexOf('{');
-      const lastBrace = text.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        text = text.substring(firstBrace, lastBrace + 1);
+      if (requireJson) {
+        // Clean response
+        text = text
+          .replace(/<think>[\s\S]*?<\/think>/gi, '')
+          .replace(/<tool>[\s\S]*?<\/tool>/gi, '')
+          .replace(/<output>[\s\S]*?<\/output>/gi, '')
+          .replace(/```json|```/gi, '')
+          .trim();
+        
+        // Extract valid JSON
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          text = text.substring(firstBrace, lastBrace + 1);
+        }
+        
+        console.log(`[Model] Success with ${modelId}`);
+        return JSON.parse(text);
+      } else {
+        console.log(`[Model] Success with ${modelId}`);
+        return text;
       }
-      
-      console.log(`[Model] Success with ${modelId}`);
-      return JSON.parse(text);
     } catch (err) {
       console.warn(`[Model] Failed with ${modelId}: ${err.message}`);
       lastError = err;
@@ -97,6 +102,47 @@ Retourne UNIQUEMENT JSON :
       claim: metadata.title || "Affirmation non spécifiée",
       language: "fr"
     };
+  }
+}
+
+async function stepSummarizeSources(claim, searchResults) {
+  // Scrape top 2 reliable sources
+  const sourcesToScrape = searchResults.reliableSources.slice(0, 2);
+  const scrapedContents = [];
+
+  for (const source of sourcesToScrape) {
+    try {
+      console.log(`[Summarize] Scraping: ${source.url}`);
+      const content = await fetchPageContent(source.url);
+      if (content) {
+        scrapedContents.push({
+          title: source.title,
+          domain: source.domain,
+          url: source.url,
+          content: content.substring(0, 4000), // Limit content size
+        });
+      }
+    } catch (err) {
+      console.error(`[Summarize] Error scraping ${source.url}:`, err.message);
+    }
+  }
+
+  if (scrapedContents.length === 0) {
+    return null;
+  }
+
+  // Generate summary
+  const systemPrompt = `Tu es VerifyNet, expert en résumé de sources pour vérification d'informations.
+Rédige un résumé détaillé en français basé UNIQUEMENT sur les contenus fournis.
+Le résumé doit synthétiser les informations clés des sources et leur rapport avec l'affirmation.`;
+  
+  const userMsg = `Affirmation: "${claim}"\n\nContenus des sources:\n${scrapedContents.map(s => `--- ${s.title} (${s.domain}) ---\n${s.content}`).join('\n')}`;
+
+  try {
+    return await callModelWithFallback(systemPrompt, userMsg, 1000, false);
+  } catch (err) {
+    console.error("[Summarize] Error generating source summary:", err);
+    return null;
   }
 }
 
@@ -150,27 +196,33 @@ Retourne JSON :
   }
 }
 
-async function stepFinalAnalysis(claim, extraction, sourceAnalyses, searchResults) {
-  const systemPrompt = `Tu es VerifyNet.
-Donne un verdict et un score 0-100.
+async function stepFinalAnalysis(claim, extraction, sourceAnalyses, searchResults, sourceSummary) {
+  const systemPrompt = `Tu es VerifyNet, expert en vérification d'informations.
+Donne un verdict, un score 0-100 ET une conclusion détaillée basée UNIQUEMENT sur les sources fournies.
 Retourne JSON :
 {
   "claim": "${claim}",
-  "topicSummary": "Résumé court",
+  "topicSummary": "Résumé court du sujet",
   "finalScore": 50,
   "verdict": "Très probable/Probable/Incertain/Peu probable/Très peu probable",
   "analysis": {"verifiedFacts": [], "doubtfulPoints": [], "falseClaims": [], "missingContext": ""},
   "sourceComparison": {"totalSources":0,"confirmingHighReliability":0,"denyingHighReliability":0,"neutralHighReliability":0,"otherSources":0},
   "sourceDisagreements": [],
   "reasoning": "Raisonnement concis",
+  "detailedConclusion": "Conclusion textuelle détaillée d'au moins 300 mots : résume l'analyse, cite les sources, explique le score et le verdict, donne des recommandations.",
   "recommendations": ["Vérifiez les sources", "Consultez plusieurs sources"]
 }`;
   
   // Simplify data to save tokens
   const simplifiedSources = sourceAnalyses.sourceAnalyses?.slice(0, 3) || [];
+  let userMsg = `Affirmation: ${claim}\nSources:${JSON.stringify(simplifiedSources)}`;
+  
+  if (sourceSummary) {
+    userMsg += `\n\nRésumé des sources:\n${sourceSummary}`;
+  }
   
   try {
-    return await callModelWithFallback(systemPrompt, `Affirmation: ${claim}\nSources:${JSON.stringify(simplifiedSources)}`, 1536);
+    return await callModelWithFallback(systemPrompt, userMsg, 3000);
   } catch (err) {
     console.log("StepFinalAnalysis: Falling back to minimal final analysis");
     return {
@@ -193,6 +245,7 @@ Retourne JSON :
       },
       sourceDisagreements: [],
       reasoning: "Veuillez consulter les sources ci-dessous pour vérifier cette affirmation.",
+      detailedConclusion: "L'analyse n'a pas pu générer de conclusion détaillée car les modèles IA n'ont pas répondu. Veuillez consulter les sources ci-dessous pour vérifier cette affirmation.",
       recommendations: ["Vérifiez les sources fiables ci-dessous", "Consultez plusieurs sources"]
     };
   }
@@ -200,7 +253,7 @@ Retourne JSON :
 
 async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
   const sendProgress = (progress, step) => {
-    console.log(`[Étape ${progress}/5] ${step}`);
+    console.log(`[Étape ${progress}/6] ${step}`);
     if (onProgress) onProgress({ progress, step });
   };
   
@@ -217,7 +270,11 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
   const searchResults = await searchWeb(extraction.claim, extraction.mainTopic, extraction.country);
   sendProgress(2, searchResults.allSources.length + ' sources trouvées (' + searchResults.reliableSources.length + ' fiables)');
   
-  sendProgress(3, 'Analyse critique des sources...');
+  sendProgress(3, 'Scraping et résumé des sources...');
+  const sourceSummary = await stepSummarizeSources(extraction.claim, searchResults);
+  sendProgress(3, 'Résumé des sources généré');
+  
+  sendProgress(4, 'Analyse critique des sources...');
   let sourceAnalyses;
   try {
     sourceAnalyses = await stepAnalyzeSources(extraction.claim, searchResults);
@@ -225,12 +282,12 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
     console.log("StepAnalyzeSources failed, using search results directly");
     sourceAnalyses = { sourceAnalyses: [], convergences: [], divergences: [], keyFindings: [] };
   }
-  sendProgress(3, 'Analyse des sources terminée');
+  sendProgress(4, 'Analyse des sources terminée');
   
-  sendProgress(4, 'Analyse finale et conclusion nuancée...');
+  sendProgress(5, 'Analyse finale et conclusion nuancée...');
   let finalAnalysis;
   try {
-    finalAnalysis = await stepFinalAnalysis(extraction.claim, extraction, sourceAnalyses, searchResults);
+    finalAnalysis = await stepFinalAnalysis(extraction.claim, extraction, sourceAnalyses, searchResults, sourceSummary);
   } catch (e) {
     console.log("StepFinalAnalysis failed, using minimal analysis");
     finalAnalysis = {
@@ -253,10 +310,11 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
       },
       sourceDisagreements: [],
       reasoning: "Veuillez consulter les sources ci-dessous.",
-      recommendations: ["Vérifiez les sources fiables ci-dessous"]
+      detailedConclusion: "L'analyse n'a pas pu générer de conclusion détaillée car les modèles IA n'ont pas répondu. Veuillez consulter les sources ci-dessous pour vérifier cette affirmation.",
+      recommendations: ["Vérifiez les sources fiables ci-dessous", "Consultez plusieurs sources"]
     };
   }
-  sendProgress(4, 'Analyse finale terminée');
+  sendProgress(5, 'Analyse finale terminée');
   
   const getReliabilityLabel = (tier) => {
     return tier === 'high' ? 'Très fiable' :
@@ -288,6 +346,8 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
     sourceComparison: finalAnalysis.sourceComparison,
     sourceDisagreements: finalAnalysis.sourceDisagreements || [],
     reasoning: finalAnalysis.reasoning,
+    detailedConclusion: finalAnalysis.detailedConclusion,
+    sourceSummary: sourceSummary,
     recommendations: finalAnalysis.recommendations,
     consultedSources: finalConsultedSources,
     firstAppearance: finalAnalysis.firstAppearance || searchResults.firstAppearance,
@@ -295,7 +355,7 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
     summary: 'Analyse de l\'affirmation : "' + extraction.claim + '"\n' + (finalAnalysis.reasoning || '')
   };
   
-  sendProgress(5, 'Rapport complet généré');
+  sendProgress(6, 'Rapport complet généré');
   return finalResult;
 }
 

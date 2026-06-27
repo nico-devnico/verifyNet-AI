@@ -12,25 +12,66 @@ const useStore = create(
       // Auth
       user: null,
       session: null,
+      profile: null,
       setUser: (user) => set({ user }),
       setSession: (session) => set({ session }),
+      setProfile: (profile) => set({ profile }),
+      
+      // Load profile from database
+      loadProfile: async () => {
+        const { user } = get();
+        if (!user) return;
+        
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+          
+          if (!error && data) {
+            set({ profile: data });
+          }
+        } catch (err) {
+          console.error('Error loading profile:', err);
+        }
+      },
+      
       signOut: async () => {
         await supabase.auth.signOut();
-        set({ user: null, session: null });
+        set({ user: null, session: null, profile: null });
+      },
+
+      // Check if user is admin
+      isAdmin: () => {
+        const { profile } = get();
+        return profile?.role === 'admin';
       },
 
       // History
       history: [],
-      addAnalysis: (analysis) =>
+      addAnalysis: (analysis, fullData) =>
         set((s) => ({
           history: [
-            { ...analysis, id: Date.now().toString(), date: new Date().toISOString() },
+            { ...analysis, id: Date.now().toString(), date: new Date().toISOString(), fullData },
             ...s.history,
           ].slice(0, 100),
         })),
       clearHistory: () => set({ history: [] }),
       removeAnalysis: (id) =>
         set((s) => ({ history: s.history.filter((a) => a.id !== id) })),
+      selectAnalysisFromHistory: (id) => {
+        const analysis = get().history.find((a) => a.id === id);
+        if (analysis && analysis.fullData) {
+          set({ 
+            currentAnalysis: analysis.fullData,
+            isAnalyzing: false,
+            analysisProgress: 100
+          });
+          return true;
+        }
+        return false;
+      },
 
       // Current analysis
       currentAnalysis: null,

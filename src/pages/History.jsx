@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Trash2, FileText } from 'lucide-react';
+import { Search, Trash2, FileText, ExternalLink } from 'lucide-react';
 import useStore from '../store';
 import { getScoreClassification, formatDate, truncate } from '../utils/helpers';
 import './History.css';
 
 export default function History() {
-  const { history, removeAnalysis, clearHistory } = useStore();
+  const { history, removeAnalysis, clearHistory, selectAnalysisFromHistory } = useStore();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const navigate = useNavigate();
 
   const filtered = useMemo(() => {
     let items = history;
@@ -22,6 +24,13 @@ export default function History() {
     if (filter === 'doubtful') items = items.filter((a) => a.score < 41);
     return items;
   }, [history, search, filter]);
+
+  const handleItemClick = (item) => {
+    if (item.fullData) {
+      selectAnalysisFromHistory(item.id);
+      navigate('/analyze');
+    }
+  };
 
   return (
     <div className="history-page">
@@ -57,8 +66,16 @@ export default function History() {
           <div className="history-list">
             {filtered.map((item, i) => {
               const cls = getScoreClassification(item.score);
+              const hasFullData = !!item.fullData;
               return (
-                <motion.div key={item.id} className="history-item card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+                <motion.div 
+                  key={item.id} 
+                  className={`history-item card ${hasFullData ? 'clickable' : ''}`}
+                  initial={{ opacity: 0, y: 10 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  transition={{ delay: i * 0.03 }}
+                  onClick={() => hasFullData && handleItemClick(item)}
+                >
                   <div className="history-item-left">
                     <span className={`badge ${cls.class}`}>{item.score}/100</span>
                     <div>
@@ -66,9 +83,12 @@ export default function History() {
                       <span className="history-meta">{formatDate(item.date)} · {item.type === 'text' ? 'Texte' : 'URL'}</span>
                     </div>
                   </div>
-                  <button className="btn btn-ghost btn-icon" onClick={() => removeAnalysis(item.id)} aria-label="Supprimer">
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="history-item-right">
+                    {hasFullData && <ExternalLink size={16} className="view-icon" />}
+                    <button className="btn btn-ghost btn-icon" onClick={(e) => { e.stopPropagation(); removeAnalysis(item.id); }} aria-label="Supprimer">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </motion.div>
               );
             })}

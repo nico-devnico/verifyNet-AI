@@ -1,11 +1,183 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Search, CheckCircle2, RotateCcw, AlertTriangle, Shield, Globe, Share2, ExternalLink, XCircle, HelpCircle } from 'lucide-react';
+import { FileText, Search, CheckCircle2, RotateCcw, AlertTriangle, Shield, Globe, Share2, ExternalLink, XCircle, HelpCircle, Download } from 'lucide-react';
 import { getScoreClassification, getScoreColor } from '../../utils/helpers';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import './AnalysisResults.css';
 
 const fadeIn = (delay = 0) => ({ initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay, duration: 0.5 } });
 
+const generatePDF = (data) => {
+  console.log('📄 Début de la génération du PDF...');
+  console.log('Données reçues:', data);
+  
+  try {
+    const doc = new jsPDF();
+    const score = data.finalScore ?? data.final_score ?? data.score ?? 0;
+    const verdict = data.verdict;
+    const claim = data.claim;
+    const mainTopic = data.mainTopic;
+    const analysis = data.analysis || {};
+    const consultedSources = data.consultedSources || data.consulted_sources || [];
+    const recommendations = data.recommendations || [];
+    const detailedConclusion = data.detailedConclusion;
+    const sourceSummary = data.sourceSummary;
+    const reasoning = data.reasoning;
+
+    console.log('✅ jsPDF initialisé');
+
+    // En-tête simple
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('VerifyNet - Rapport d\'analyse', 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 14, 30);
+
+    let yPosition = 40;
+
+    // Section Score
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Résultat', 14, yPosition);
+    yPosition += 8;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Score: ${score}/100`, 14, yPosition);
+    yPosition += 6;
+    doc.text(`Verdict: ${verdict || 'Analyse terminée'}`, 14, yPosition);
+    yPosition += 10;
+
+    // Affirmation
+    if (claim) {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Affirmation analysée', 14, yPosition);
+      yPosition += 8;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const claimLines = doc.splitTextToSize(claim, 180);
+      doc.text(claimLines, 14, yPosition);
+      yPosition += (claimLines.length * 6) + 8;
+    }
+
+    // Résumé des sources
+    if (sourceSummary) {
+      if (yPosition > 250) { doc.addPage(); yPosition = 20; }
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Résumé des sources', 14, yPosition);
+      yPosition += 8;
+      doc.setFontSize(10);
+      const summaryLines = doc.splitTextToSize(sourceSummary, 180);
+      doc.text(summaryLines, 14, yPosition);
+      yPosition += (summaryLines.length * 6) + 8;
+    }
+
+    // Raisonnement
+    if (reasoning) {
+      if (yPosition > 250) { doc.addPage(); yPosition = 20; }
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Raisonnement de l\'IA', 14, yPosition);
+      yPosition += 8;
+      doc.setFontSize(10);
+      const reasoningLines = doc.splitTextToSize(reasoning, 180);
+      doc.text(reasoningLines, 14, yPosition);
+      yPosition += (reasoningLines.length * 6) + 8;
+    }
+
+    // Conclusion
+    if (detailedConclusion) {
+      if (yPosition > 250) { doc.addPage(); yPosition = 20; }
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Conclusion détaillée', 14, yPosition);
+      yPosition += 8;
+      doc.setFontSize(10);
+      const conclusionLines = doc.splitTextToSize(detailedConclusion, 180);
+      doc.text(conclusionLines, 14, yPosition);
+      yPosition += (conclusionLines.length * 6) + 8;
+    }
+
+    // Sources
+    if (consultedSources.length > 0) {
+      if (yPosition > 150) { doc.addPage(); yPosition = 20; }
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Sources consultées', 14, yPosition);
+      yPosition += 12;
+      
+      // Afficher les sources avec liens cliquables
+      consultedSources.slice(0, 10).forEach((source, index) => {
+        if (yPosition > 270) {
+          doc.addPage();
+          yPosition = 20;
+        }
+        
+        // Titre de la source
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(20, 184, 166); // Couleur primaire
+        
+        const titleText = source.title?.substring(0, 80) || 'Sans titre';
+        doc.text(titleText, 14, yPosition);
+        
+        // Ajouter le lien cliquable
+        if (source.url) {
+          try {
+            doc.link(14, yPosition - 6, 180, 8, { url: source.url });
+          } catch (e) {
+            console.log('Could not add link to PDF:', e);
+          }
+        }
+        
+        yPosition += 7;
+        
+        // Domaine et fiabilité
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        
+        const metaText = `${source.domain || 'N/A'} - ${source.reliabilityLabel || 'Fiabilité inconnue'}`;
+        doc.text(metaText, 14, yPosition);
+        yPosition += 6;
+        
+        // URL complète
+        if (source.url) {
+          doc.setFontSize(8);
+          doc.setTextColor(60, 120, 216); // Bleu pour les liens
+          const urlText = source.url.length > 80 ? source.url.substring(0, 80) + '...' : source.url;
+          doc.text(urlText, 14, yPosition);
+          yPosition += 10;
+        } else {
+          yPosition += 4;
+        }
+      });
+      
+      // Si plus de sources, mentionner
+      if (consultedSources.length > 10) {
+        if (yPosition > 275) { doc.addPage(); yPosition = 20; }
+        doc.setFontSize(9);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`... et ${consultedSources.length - 10} autres sources consultées (voir la page web pour la liste complète)`, 14, yPosition);
+      }
+    }
+
+    console.log('✅ PDF généré avec succès, téléchargement en cours...');
+    doc.save(`rapport-verifynet-${Date.now()}.pdf`);
+    console.log('✅ PDF téléchargé !');
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la génération du PDF:', error);
+    alert(`Erreur lors de la génération du PDF: ${error.message}`);
+  }
+};
+
 export default function AnalysisResults({ data, onReset }) {
+  const [pdfError, setPdfError] = useState('');
   const score = data.finalScore ?? data.final_score ?? data.score ?? 0;
   const verdict = data.verdict;
   const summary = data.summary;
@@ -16,6 +188,8 @@ export default function AnalysisResults({ data, onReset }) {
   const sourceComparison = data.sourceComparison || data.source_summary || {};
   const sourceDisagreements = data.sourceDisagreements || data.sourceDisagreements || [];
   const reasoning = data.reasoning;
+  const detailedConclusion = data.detailedConclusion;
+  const sourceSummary = data.sourceSummary;
   const recommendations = data.recommendations || [];
   const consultedSources = data.consultedSources || data.consulted_sources || [];
   const firstAppearance = data.firstAppearance || data.first_appearance;
@@ -25,6 +199,16 @@ export default function AnalysisResults({ data, onReset }) {
   const topicSummary = data.topicSummary;
   const classification = getScoreClassification(score);
   const scoreColor = getScoreColor(score);
+
+  const handleDownloadPDF = () => {
+    setPdfError('');
+    try {
+      generatePDF(data);
+    } catch (error) {
+      console.error('❌ Erreur lors du téléchargement:', error);
+      setPdfError(`Erreur: ${error.message}`);
+    }
+  };
 
   return (
     <motion.div className="analysis-results" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -87,9 +271,29 @@ export default function AnalysisResults({ data, onReset }) {
         </motion.div>
       )}
 
+      {/* Résumé des sources scrapées */}
+      {sourceSummary && (
+        <motion.div className="result-section" {...fadeIn(0.15)}>
+          <h3><FileText size={18} /> Résumé des sources</h3>
+          <div className="source-summary-text card">
+            <p>{sourceSummary}</p>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Raisonnement de l'IA */}
+      {reasoning && (
+        <motion.div className="result-section" {...fadeIn(0.2)}>
+          <h3><Search size={18} /> Raisonnement de l'IA</h3>
+          <div className="reasoning-card card">
+            <p>{reasoning}</p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Nuanced Analysis */}
-      <motion.div className="result-section" {...fadeIn(0.15)}>
-        <h3><Search size={18} /> Analyse détaillée</h3>
+      <motion.div className="result-section" {...fadeIn(0.25)}>
+        <h3><Shield size={18} /> Analyse détaillée</h3>
         
         {analysis.verifiedFacts?.length > 0 && (
           <div className="analysis-block analysis-positive">
@@ -128,7 +332,7 @@ export default function AnalysisResults({ data, onReset }) {
 
       {/* Source Disagreements */}
       {sourceDisagreements.length > 0 && (
-        <motion.div className="result-section" {...fadeIn(0.2)}>
+        <motion.div className="result-section" {...fadeIn(0.3)}>
           <h3><AlertTriangle size={18} /> Désaccords entre sources</h3>
           <div className="disagreements-list">
             {sourceDisagreements.map((disagreement, idx) => (
@@ -161,10 +365,10 @@ export default function AnalysisResults({ data, onReset }) {
         </motion.div>
       )}
 
-      {/* Source Summary */}
+      {/* Statistiques des sources */}
       {sourceComparison.totalSources > 0 && (
-        <motion.div className="result-section" {...fadeIn(0.25)}>
-          <h3><Shield size={18} /> Résumé des sources</h3>
+        <motion.div className="result-section" {...fadeIn(0.35)}>
+          <h3><Globe size={18} /> Statistiques des sources</h3>
           <div className="source-summary-grid">
             <div className="source-summary-item"><strong>{sourceComparison.totalSources}</strong><span>sources consultées</span></div>
             {sourceComparison.confirmingHighReliability > 0 && <div className="source-summary-item positive"><strong>{sourceComparison.confirmingHighReliability}</strong><span>confirment</span></div>}
@@ -215,13 +419,17 @@ export default function AnalysisResults({ data, onReset }) {
         </motion.div>
       )}
 
-      {/* Reasoning */}
-      {reasoning && (
+      {/* Detailed Conclusion */}
+      {detailedConclusion && (
         <motion.div className="result-section" {...fadeIn(0.35)}>
-          <h3><Shield size={18} /> Raisonnement</h3>
-          <p className="reasoning-text">{reasoning}</p>
+          <h3><FileText size={18} /> Conclusion détaillée</h3>
+          <div className="detailed-conclusion card">
+            <p>{detailedConclusion}</p>
+          </div>
         </motion.div>
       )}
+
+
 
       {/* Circulation Info */}
       {circulationPlatforms.length > 0 && (
@@ -257,7 +465,13 @@ export default function AnalysisResults({ data, onReset }) {
       )}
 
       {/* Actions */}
-      <motion.div className="result-actions" {...fadeIn(0.5)}>
+      <motion.div className="result-actions" {...fadeIn(0.55)}>
+        {pdfError && (
+          <div className="error-message" style={{ color: 'red', marginBottom: '16px', padding: '12px', borderRadius: '8px', background: 'rgba(255,0,0,0.1)' }}>
+            {pdfError}
+          </div>
+        )}
+        <button className="btn btn-secondary btn-lg" onClick={handleDownloadPDF}><Download size={18} /> Télécharger le rapport PDF</button>
         <button className="btn btn-primary btn-lg" onClick={onReset}><RotateCcw size={18} /> Nouvelle analyse</button>
       </motion.div>
     </motion.div>

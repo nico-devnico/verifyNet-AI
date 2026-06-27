@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Layout from './components/layout/Layout';
 import useStore from './store';
@@ -14,6 +14,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const About = lazy(() => import('./pages/About'));
 const Login = lazy(() => import('./pages/Login'));
 const Signup = lazy(() => import('./pages/Signup'));
+const Admin = lazy(() => import('./pages/Admin'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -27,8 +28,24 @@ function LoadingFallback() {
   );
 }
 
-export default function App() {
-  const { setUser, setSession, user } = useStore();
+// Protected route wrapper
+function ProtectedRoute({ children, requireAdmin = false }) {
+  const { user, profile, isAdmin } = useStore();
+  const location = useLocation();
+
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (requireAdmin && !isAdmin()) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+function AppContent() {
+  const { setUser, setSession, user, loadProfile, profile } = useStore();
 
   useEffect(() => {
     // Check initial session
@@ -46,23 +63,65 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [setUser, setSession]);
 
+  // Load profile when user is authenticated
+  useEffect(() => {
+    if (user && !profile) {
+      loadProfile();
+    }
+  }, [user, profile, loadProfile]);
+
+  return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Landing />} />
+        <Route path="login" element={<Login />} />
+        <Route path="signup" element={<Signup />} />
+        <Route path="about" element={<About />} />
+        <Route path="analyze" element={<Analyze />} />
+        <Route 
+          path="history" 
+          element={
+            <ProtectedRoute>
+              <History />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="dashboard" 
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="settings" 
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="admin" 
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <Admin />
+            </ProtectedRoute>
+          } 
+        />
+        <Route path="*" element={<Landing />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Suspense fallback={<LoadingFallback />}>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Landing />} />
-              <Route path="login" element={<Login />} />
-              <Route path="signup" element={<Signup />} />
-              <Route path="analyze" element={<Analyze />} />
-              <Route path="history" element={user ? <History /> : <Navigate to="/login" />} />
-              <Route path="dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-              <Route path="settings" element={user ? <Settings /> : <Navigate to="/login" />} />
-              <Route path="about" element={<About />} />
-              <Route path="*" element={<Landing />} />
-            </Route>
-          </Routes>
+          <AppContent />
         </Suspense>
       </BrowserRouter>
     </QueryClientProvider>

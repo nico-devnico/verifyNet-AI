@@ -337,16 +337,51 @@
   word-break: break-word;
 }
 
-.reasoning-text {
+.source-summary-text {
+  padding: 20px;
+}
+
+.source-summary-text p {
   font-size: 0.9375rem;
   line-height: 1.8;
-  color: var(--text-secondary);
-  background: var(--bg);
-  padding: 18px;
-  border-radius: var(--radius);
-  border-left: 3px solid var(--primary);
+  color: var(--text);
   word-break: break-word;
+  margin: 0;
+}
+
+.reasoning-card {
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.05), transparent);
+  border-left: 3px solid var(--primary);
+}
+
+.reasoning-card p {
+  font-size: 0.9375rem;
+  line-height: 1.8;
+  color: var(--text);
+  word-break: break-word;
+  margin: 0;
   white-space: pre-line;
+}
+
+.detailed-conclusion {
+  padding: 20px;
+}
+
+.detailed-conclusion p {
+  font-size: 0.9375rem;
+  line-height: 1.8;
+  color: var(--text);
+  word-break: break-word;
+  margin: 0;
+}
+
+.result-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding: 24px 0;
+  flex-wrap: wrap;
 }
 
 .recommendations-list {

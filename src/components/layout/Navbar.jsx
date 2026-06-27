@@ -1,23 +1,27 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sun, Moon, Menu, X, LogIn, CheckCircle, User, LogOut, Settings } from 'lucide-react';
+import { Sun, Moon, Menu, X, LogIn, CheckCircle, User, LogOut, Settings, Shield } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import useStore from '../../store';
 import './Navbar.css';
-
-const navLinks = [
-  { to: '/', label: 'Accueil' },
-  { to: '/analyze', label: 'Analyser' },
-  { to: '/history', label: 'Historique' },
-  { to: '/dashboard', label: 'Dashboard' },
-];
 
 export default function Navbar() {
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, signOut } = useStore();
+  const { user, signOut, isAdmin } = useStore();
+  
+  // Build nav links: Accueil and Analyser always visible; others only when authenticated
+  const navLinks = [
+    { to: '/', label: 'Accueil' },
+    { to: '/analyze', label: 'Analyser' },
+    ...(user ? [
+      { to: '/history', label: 'Historique' },
+      { to: '/dashboard', label: 'Dashboard' },
+      ...(isAdmin() ? [{ to: '/admin', label: 'Admin' }] : [])
+    ] : [])
+  ];
 
   return (
     <nav className="navbar" role="navigation" aria-label="Navigation principale">
@@ -60,8 +64,14 @@ export default function Navbar() {
               <div className="user-dropdown">
                 <Link to="/settings" className="user-dropdown-item">
                   <Settings size={16} />
-                  Paramètres
+                  Paramètres & Profil
                 </Link>
+                {isAdmin() && (
+                  <Link to="/admin" className="user-dropdown-item">
+                    <Shield size={16} />
+                    Administration
+                  </Link>
+                )}
                 <button className="user-dropdown-item" onClick={signOut}>
                   <LogOut size={16} />
                   Se déconnecter
@@ -71,7 +81,6 @@ export default function Navbar() {
           ) : (
             <Link to="/login" className="btn btn-primary btn-sm">
               Se connecter
-              <LogIn size={14} />
             </Link>
           )}
 

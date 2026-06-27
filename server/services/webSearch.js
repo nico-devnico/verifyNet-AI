@@ -109,6 +109,37 @@ function generateSearchQueries(claim, mainTopic, country) {
   return queries;
 }
 
+async function resolveFinalUrl(url) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    const response = await fetch(url, {
+      method: 'HEAD',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    return response.url;
+  } catch (error) {
+    console.log(`[WebSearch] URL resolution failed for ${url}, using original:`, error.message);
+    return url;
+  }
+}
+
+function isValidUrl(string) {
+  try {
+    new URL(string);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function fetchPageContent(url) {
   try {
     const response = await fetch(url, {
@@ -204,17 +235,41 @@ async function searchWeb(claim, mainTopic, country) {
   // Deduplicate results by URL
   const seenUrls = new Set();
   const uniqueResults = allResults.filter(result => {
+    if (!isValidUrl(result.url)) return false;
     if (seenUrls.has(result.url)) return false;
     seenUrls.add(result.url);
     return true;
   });
   
+  // Resolve final URLs (resolve redirects) - limit to 10 URLs to avoid long wait
+  console.log(`[WebSearch] Resolving final URLs for ${Math.min(uniqueResults.length, 10)} sources...`);
+  const resolvePromises = uniqueResults.slice(0, 10).map(async (result) => {
+    try {
+      const finalUrl = await resolveFinalUrl(result.url);
+      return { ...result, url: finalUrl };
+    } catch {
+      return result;
+    }
+  });
+  
+  const resolvedResults = await Promise.all(resolvePromises);
+  const remainingResults = uniqueResults.slice(10);
+  const allResolvedResults = [...resolvedResults, ...remainingResults];
+  
+  // Deduplicate again after URL resolution
+  const finalSeenUrls = new Set();
+  const finalUniqueResults = allResolvedResults.filter(result => {
+    if (finalSeenUrls.has(result.url)) return false;
+    finalSeenUrls.add(result.url);
+    return true;
+  });
+  
   // Separate reliable sources from others
-  const reliableResults = uniqueResults.filter(result => 
+  const reliableResults = finalUniqueResults.filter(result => 
     ['high', 'institutional', 'scientific', 'factchecking'].includes(result.reliability)
   ).slice(0, 25);
   
-  const otherResults = uniqueResults.filter(result => 
+  const otherResults = finalUniqueResults.filter(result => 
     !reliableResults.some(r => r.url === result.url)
   ).slice(0, 25);
   
@@ -224,10 +279,12 @@ async function searchWeb(claim, mainTopic, country) {
     );
   }
   
+  console.log(`[WebSearch] Found ${reliableResults.length} reliable sources and ${otherResults.length} other sources`);
+  
   return {
     reliableSources: reliableResults,
     otherSources: otherResults,
-    allSources: uniqueResults.slice(0, 50),
+    allSources: finalUniqueResults.slice(0, 50),
     circulatingOn: [
       { site: 'facebook.com', type: 'social' },
       { site: 'twitter.com', type: 'social' },
@@ -236,4 +293,4 @@ async function searchWeb(claim, mainTopic, country) {
   };
 }
 
-module.exports = { searchWeb, RELIABLE_SOURCES, generateSearchQueries };
+module.exports = { searchWeb, RELIABLE_SOURCES, generateSearchQueries, fetchPageContent, resolveFinalUrl, isValidUrl };

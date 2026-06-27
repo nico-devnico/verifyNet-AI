@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Link2, Search } from 'lucide-react';
+import { FileText, Link2, Search, ExternalLink } from 'lucide-react';
 import useStore from '../store';
 import { analyzeText, analyzeUrl } from '../services/api';
 import { isValidUrl, sanitizeInput } from '../utils/helpers';
@@ -42,7 +42,7 @@ export default function Analyze() {
       
       setCurrentAnalysis(result);
       const resultScore = result.final_score ?? result.finalScore ?? result.score ?? 0;
-      addAnalysis({ type: tab, input: tab === 'text' ? input.slice(0, 100) : input, score: resultScore, verdict: result.verdict });
+      addAnalysis({ type: tab, input: tab === 'text' ? input.slice(0, 100) : input, score: resultScore, verdict: result.verdict }, result);
     } catch (err) {
       setError(err.message || 'Une erreur est survenue lors de l\'analyse. Veuillez réessayer.');
     } finally {
