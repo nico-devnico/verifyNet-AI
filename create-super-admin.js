@@ -11,7 +11,7 @@ const { createClient } = require('@supabase/supabase-js');
 
 // Configuration - REMPLACEZ CES VALEURS PAR LES VÔTRES !
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lvqvlydzfcuhiyxpadsr.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'VOTRE_CLE_SERVICE_ROLE';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'YOUR_SERVICE_ROLE_KEY_HERE';
 
 // Paramètres du super admin
 const SUPER_ADMIN_EMAIL = 'nicodevnico@gmail.com';
