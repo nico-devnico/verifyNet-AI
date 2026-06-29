@@ -16,7 +16,44 @@ function clamp(v) {
   return Math.max(0, Math.min(100, Math.round(v)));
 }
 
+// Simple fallback analysis when AI models fail
+function getFallbackAnalysis(claim, searchResults) {
+  console.log('[Fusion] Using fallback analysis');
+  return {
+    claim: claim,
+    topicSummary: "Analyse de l'affirmation",
+    finalScore: 50,
+    verdict: "Incertain",
+    analysis: {
+      verifiedFacts: [],
+      doubtfulPoints: [],
+      falseClaims: [],
+      missingContext: "Analyse approfondie indisponible, consultez les sources ci-dessous"
+    },
+    sourceComparison: {
+      totalSources: searchResults.allSources.length,
+      confirmingHighReliability: 0,
+      denyingHighReliability: 0,
+      neutralHighReliability: searchResults.reliableSources.length,
+      otherSources: searchResults.otherSources.length
+    },
+    sourceDisagreements: [],
+    reasoning: "Veuillez consulter les sources ci-dessous pour vérifier cette affirmation.",
+    detailedConclusion: "L'analyse n'a pas pu générer de conclusion détaillée car les modèles IA n'ont pas répondu. Veuillez consulter les sources ci-dessous pour vérifier cette affirmation.",
+    recommendations: ["Vérifiez les sources fiables ci-dessous", "Consultez plusieurs sources"]
+  };
+}
+
 async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048, requireJson = true) {
+  // Check if API key is available
+  if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY.trim() === '') {
+    console.warn('[Model] No Groq API key found');
+    if (requireJson) {
+      throw new Error('No API key available');
+    }
+    return "Analyse non disponible sans clé API.";
+  }
+
   let lastError;
 
   const truncatedUserMessage = userMessage.length > 3000 
@@ -90,6 +127,7 @@ Retourne UNIQUEMENT JSON :
   try {
     return await callModelWithFallback(systemPrompt, userMsg, 256);
   } catch (err) {
+    console.warn('[Extract] Using fallback extraction');
     return {
       mainTopic: "Contenu à vérifier",
       country: null,
@@ -168,7 +206,7 @@ Retourne JSON :
   try {
     return await callModelWithFallback(systemPrompt, `Affirmation: "${claim}"\nSources:${JSON.stringify(simplifiedSources)}`, 1536);
   } catch (err) {
-    console.log("StepAnalyzeSources: Falling back to minimal analysis");
+    console.log("[AnalyzeSources] Falling back to minimal analysis");
     return {
       sourceAnalyses: simplifiedSources.map(s => ({
         url: s.url,
@@ -213,30 +251,8 @@ Retourne JSON :
   try {
     return await callModelWithFallback(systemPrompt, userMsg, 3000);
   } catch (err) {
-    console.log("StepFinalAnalysis: Falling back to minimal final analysis");
-    return {
-      claim: claim,
-      topicSummary: "Analyse de l'affirmation",
-      finalScore: 50,
-      verdict: "Incertain",
-      analysis: {
-        verifiedFacts: [],
-        doubtfulPoints: [],
-        falseClaims: [],
-        missingContext: "Analyse approfondie indisponible, consultez les sources ci-dessous"
-      },
-      sourceComparison: {
-        totalSources: searchResults.allSources.length,
-        confirmingHighReliability: 0,
-        denyingHighReliability: 0,
-        neutralHighReliability: searchResults.reliableSources.length,
-        otherSources: searchResults.otherSources.length
-      },
-      sourceDisagreements: [],
-      reasoning: "Veuillez consulter les sources ci-dessous pour vérifier cette affirmation.",
-      detailedConclusion: "L'analyse n'a pas pu générer de conclusion détaillée car les modèles IA n'ont pas répondu. Veuillez consulter les sources ci-dessous pour vérifier cette affirmation.",
-      recommendations: ["Vérifiez les sources fiables ci-dessous", "Consultez plusieurs sources"]
-    };
+    console.log("[FinalAnalysis] Falling back to minimal final analysis");
+    return getFallbackAnalysis(claim, searchResults);
   }
 }
 
@@ -274,29 +290,7 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
     finalAnalysis = await stepFinalAnalysis(extraction.claim, extraction, sourceAnalyses, searchResults, sourceSummary);
   } catch (e) {
     console.log("StepFinalAnalysis failed, using minimal analysis");
-    finalAnalysis = {
-      claim: extraction.claim,
-      topicSummary: "Analyse de l'affirmation",
-      finalScore: 50,
-      verdict: "Incertain",
-      analysis: {
-        verifiedFacts: [],
-        doubtfulPoints: [],
-        falseClaims: [],
-        missingContext: "Analyse approfondie indisponible"
-      },
-      sourceComparison: {
-        totalSources: searchResults.allSources.length,
-        confirmingHighReliability: 0,
-        denyingHighReliability: 0,
-        neutralHighReliability: searchResults.reliableSources.length,
-        otherSources: searchResults.otherSources.length
-      },
-      sourceDisagreements: [],
-      reasoning: "Veuillez consulter les sources ci-dessous.",
-      detailedConclusion: "L'analyse n'a pas pu générer de conclusion détaillée car les modèles IA n'ont pas répondu. Veuillez consulter les sources ci-dessous pour vérifier cette affirmation.",
-      recommendations: ["Vérifiez les sources fiables ci-dessous", "Consultez plusieurs sources"]
-    };
+    finalAnalysis = getFallbackAnalysis(extraction.claim, searchResults);
   }
   
   const getReliabilityLabel = (tier) => {
