@@ -1,5 +1,5 @@
-const { analyzeWithFusion } = require('../_services/fusion.cjs');
-const { sanitizeText } = require('../_services/scraper.cjs');
+const { analyzeWithFusion } = require('../_services/fusion');
+const { sanitizeText } = require('../_services/scraper');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');

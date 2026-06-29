@@ -1,5 +1,5 @@
 const Groq = require('groq-sdk');
-const { searchWeb, RELIABLE_SOURCES, fetchPageContent } = require('./webSearch.cjs');
+const { searchWeb, RELIABLE_SOURCES, fetchPageContent } = require('./webSearch');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
