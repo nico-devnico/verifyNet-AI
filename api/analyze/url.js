@@ -1,7 +1,7 @@
-const { analyzeWithFusion } = require('../_services/fusion');
-const { scrapeUrl } = require('../_services/scraper');
+import { analyzeWithFusion } from '../_services/fusion.js';
+import { scrapeUrl } from '../_services/scraper.js';
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
     console.log('📥 [API/url] Requête reçue:', req.method);
 

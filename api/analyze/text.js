@@ -1,6 +1,6 @@
-const { analyzeWithFusion } = require('../_services/fusion');
+import { analyzeWithFusion } from '../_services/fusion.js';
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
     console.log('📥 [API/text] Requête reçue:', req.method);
 

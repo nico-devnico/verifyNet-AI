@@ -1,6 +1,6 @@
-const { getJson } = require('serpapi');
-const { Readability } = require('@mozilla/readability');
-const { JSDOM } = require('jsdom');
+import { getJson } from 'serpapi';
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
 
 const RELIABLE_SOURCES = {
   high: [
@@ -280,4 +280,4 @@ async function searchWeb(claim, mainTopic, country) {
   };
 }
 
-module.exports = { searchWeb, RELIABLE_SOURCES, generateSearchQueries, fetchPageContent, resolveFinalUrl, isValidUrl };
+export { searchWeb, RELIABLE_SOURCES, generateSearchQueries, fetchPageContent, resolveFinalUrl, isValidUrl };
