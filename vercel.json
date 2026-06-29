@@ -1,9 +1,22 @@
 {
   "version": 2,
+  "functions": {
+    "api/health.cjs": { "runtime": "@vercel/node@latest" },
+    "api/analyze/text.cjs": { "runtime": "@vercel/node@latest" },
+    "api/analyze/url.cjs": { "runtime": "@vercel/node@latest" }
+  },
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/api/health",
+      "destination": "/api/health.cjs"
+    },
+    {
+      "source": "/api/analyze/text",
+      "destination": "/api/analyze/text.cjs"
+    },
+    {
+      "source": "/api/analyze/url",
+      "destination": "/api/analyze/url.cjs"
     },
     {
       "source": "/(.*)",
