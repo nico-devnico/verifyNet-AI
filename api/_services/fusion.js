@@ -129,9 +129,9 @@ Retourne UNIQUEMENT JSON:
   } catch (err) {
     console.warn('[Extract] Using fallback extraction');
     return {
-      mainTopic: "Contenu à vérifier",
+      mainTopic: metadata.title || "Contenu à vérifier",
       country: null,
-      claim: metadata.title || "Affirmation non spécifiée",
+      claim: content.substring(0, 200) || metadata.title || "Affirmation non spécifiée",
       language: "fr"
     };
   }
