@@ -1,5 +1,5 @@
-import Groq from 'groq-sdk';
-import { searchWeb, RELIABLE_SOURCES, fetchPageContent } from './webSearch.js';
+const Groq = require('groq-sdk');
+const { searchWeb, RELIABLE_SOURCES, fetchPageContent } = require('./webSearch');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
@@ -99,7 +99,7 @@ async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048
         return text;
       }
     } catch (err) {
-      console.warn(`[Model] Failed with ${modelId}:`, err.message);
+      console.warn(`[Model] Failed with ${modelId}: ${err.message}`);
       lastError = err;
     }
   }
@@ -110,7 +110,7 @@ async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048
 async function stepExtractStructured(content, metadata = {}) {
   const systemPrompt = `Tu es un expert en analyse de contenu pour vérification d'informations.
 Extraie les informations clés.
-Retourne UNIQUEMENT JSON:
+Retourne UNIQUEMENT JSON :
 {
   "mainTopic": "sujet principal",
   "country": "pays ou null",
@@ -129,9 +129,9 @@ Retourne UNIQUEMENT JSON:
   } catch (err) {
     console.warn('[Extract] Using fallback extraction');
     return {
-      mainTopic: metadata.title || "Contenu à vérifier",
+      mainTopic: "Contenu à vérifier",
       country: null,
-      claim: content.substring(0, 200) || metadata.title || "Affirmation non spécifiée",
+      claim: metadata.title || "Affirmation non spécifiée",
       language: "fr"
     };
   }
@@ -187,7 +187,7 @@ Pour chaque source, indique:
 1. stance: confirme/infirme/neutre/non pertinent
 2. justification: 1 phrase max
 3. credibilityScore: 0-100
-Retourne JSON:
+Retourne JSON :
 {
   "sourceAnalyses": [{"url":"", "domain":"", "title":"", "reliabilityTier":"", "stance":"", "justification":"", "credibilityScore":0}],
   "convergences": [],
@@ -227,7 +227,7 @@ Retourne JSON:
 async function stepFinalAnalysis(claim, extraction, sourceAnalyses, searchResults, sourceSummary) {
   const systemPrompt = `Tu es VerifyNet, expert en vérification d'informations.
 Donne un verdict, un score 0-100 ET une conclusion détaillée basée UNIQUEMENT sur les sources fournies.
-Retourne JSON:
+Retourne JSON :
 {
   "claim": "${claim}",
   "topicSummary": "Résumé court du sujet",
@@ -237,7 +237,7 @@ Retourne JSON:
   "sourceComparison": {"totalSources":0,"confirmingHighReliability":0,"denyingHighReliability":0,"neutralHighReliability":0,"otherSources":0},
   "sourceDisagreements": [],
   "reasoning": "Raisonnement concis",
-  "detailedConclusion": "Conclusion textuelle détaillée d'au moins 300 mots: résume l'analyse, cite les sources, explique le score et le verdict, donne des recommandations.",
+  "detailedConclusion": "Conclusion textuelle détaillée d'au moins 300 mots : résume l'analyse, cite les sources, explique le score et le verdict, donne des recommandations.",
   "recommendations": ["Vérifiez les sources", "Consultez plusieurs sources"]
 }`;
   
@@ -329,10 +329,10 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
     consultedSources: finalConsultedSources,
     firstAppearance: finalAnalysis.firstAppearance || searchResults.firstAppearance,
     circulationPlatforms: finalAnalysis.circulationPlatforms || searchResults.circulatingOn?.map(c => c.site) || [],
-    summary: 'Analyse de l\'affirmation: "' + extraction.claim + '"\n' + (finalAnalysis.reasoning || '')
+    summary: 'Analyse de l\'affirmation : "' + extraction.claim + '"\n' + (finalAnalysis.reasoning || '')
   };
   
   return finalResult;
 }
 
-export { analyzeWithFusion };
+module.exports = { analyzeWithFusion };

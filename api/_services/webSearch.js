@@ -1,4 +1,6 @@
-import { getJson } from 'serpapi';
+const { getJson } = require('serpapi');
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
 
 const RELIABLE_SOURCES = {
   high: [
@@ -80,15 +82,15 @@ const FALLBACK_SOURCES = [
 function generateSearchQueries(claim, mainTopic, country) {
   const queries = [];
   
-  let searchClaim = claim;
-  if (!searchClaim || searchClaim === 'null' || searchClaim.trim() === '') {
-    searchClaim = mainTopic;
+  let searchQuery = claim;
+  if (!searchQuery || searchQuery === 'null' || searchQuery.trim() === '') {
+    searchQuery = mainTopic;
   }
   
   if (country) {
-    queries.push(`${country} ${searchClaim}`);
+    queries.push(`${country} ${searchQuery}`);
   } else {
-    queries.push(searchClaim);
+    queries.push(searchQuery);
   }
   
   if (mainTopic) {
@@ -96,8 +98,8 @@ function generateSearchQueries(claim, mainTopic, country) {
     queries.push(`${mainTopic} vérification`);
   }
   
-  queries.push(`${searchClaim} vérification`);
-  queries.push(`${searchClaim} fact check`);
+  queries.push(`${searchQuery} vérification`);
+  queries.push(`${searchQuery} fact check`);
   
   return queries;
 }
@@ -134,13 +136,12 @@ function isValidUrl(string) {
 }
 
 async function fetchPageContent(url) {
-  console.log('[webSearch] fetchPageContent simplified (no JSDOM)');
   try {
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(20000),
     });
     
     if (!response.ok) {
@@ -148,14 +149,11 @@ async function fetchPageContent(url) {
     }
     
     const html = await response.text();
-    // Simple extraction without DOM parsing to avoid issues
-    const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-                      .replace(/<[^>]+>/g, ' ')
-                      .replace(/\s+/g, ' ')
-                      .trim();
+    const dom = new JSDOM(html, { url });
+    const reader = new Readability(dom.window.document);
+    const article = reader.parse();
     
-    return text.slice(0, 4000);
+    return article ? article.textContent.slice(0, 8000) : null;
   } catch (error) {
     console.error(`[WebSearch] Error fetching ${url}:`, error.message);
     return null;
@@ -282,4 +280,4 @@ async function searchWeb(claim, mainTopic, country) {
   };
 }
 
-export { searchWeb, RELIABLE_SOURCES, generateSearchQueries, fetchPageContent, resolveFinalUrl, isValidUrl };
+module.exports = { searchWeb, RELIABLE_SOURCES, generateSearchQueries, fetchPageContent, resolveFinalUrl, isValidUrl };

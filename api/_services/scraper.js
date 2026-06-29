@@ -1,4 +1,7 @@
-// ZERO EXTERNAL DEPENDENCIES scraper! 100% pure Node.js
+const cheerio = require('cheerio');
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
+
 const BLOCKED_DOMAINS = ['facebook.com/login', 'twitter.com/i/flow/login'];
 
 function isValidUrl(str) {
@@ -17,8 +20,6 @@ function sanitizeText(text) {
 }
 
 async function scrapeUrl(url) {
-  console.log('[scraper] Starting scrape for:', url);
-  
   if (!isValidUrl(url)) {
     throw new Error('URL invalide. Veuillez fournir une URL HTTP ou HTTPS.');
   }
@@ -31,7 +32,6 @@ async function scrapeUrl(url) {
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    console.log('[scraper] Fetching URL...');
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
@@ -53,43 +53,51 @@ async function scrapeUrl(url) {
       throw new Error('Le contenu n\'est pas une page HTML.');
     }
 
-    console.log('[scraper] Reading and processing HTML...');
     const html = await response.text();
-    
-    // Extract title
-    let title = '';
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    if (titleMatch) {
-      title = sanitizeText(titleMatch[1]);
+
+    const dom = new JSDOM(html, { url });
+    const reader = new Readability(dom.window.document);
+    const article = reader.parse();
+
+    if (article && article.textContent && article.textContent.trim().length > 50) {
+      return {
+        title: sanitizeText(article.title || ''),
+        content: sanitizeText(article.textContent),
+        author: sanitizeText(article.byline || ''),
+        date: article.publishedTime || '',
+        source: new URL(url).hostname,
+        url,
+      };
     }
-    
-    // Extract text content (super simple)
-    const content = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
-      .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-      .replace(/<!--[\s\S]*?-->/g, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 8000);
+
+    const $ = cheerio.load(html);
+
+    $('script, style, nav, header, footer, aside, .ad, .ads, .advertisement, .sidebar, .menu, .nav, .cookie, .popup, iframe, noscript').remove();
+
+    const title = $('h1').first().text() || $('title').text() || '';
+    const content = $('article').text() || $('main').text() || $('.post-content').text() || $('.article-body').text() || $('body').text() || '';
+    const author = $('[rel="author"]').text() || $('.author').text() || $('[itemprop="author"]').text() || '';
+    const date = $('time').attr('datetime') || $('[itemprop="datePublished"]').attr('content') || '';
+
+    const cleanContent = sanitizeText(content);
+
+    if (cleanContent.length < 50) {
+      throw new Error('Impossible d\'extraire un contenu suffisant de cette page.');
+    }
 
     return {
-      title: title || new URL(url).hostname,
-      content: content.length > 50 ? content : `Contenu récupéré depuis ${url}`,
-      author: '',
-      date: '',
+      title: sanitizeText(title),
+      content: cleanContent.slice(0, 8000),
+      author: sanitizeText(author),
+      date,
       source: new URL(url).hostname,
       url,
     };
-
   } catch (err) {
     clearTimeout(timeout);
-    console.error('[scraper] Error:', err.message);
     if (err.name === 'AbortError') throw new Error('Le délai d\'attente a été dépassé.');
     throw err;
   }
 }
 
-export { scrapeUrl, isValidUrl, sanitizeText };
+module.exports = { scrapeUrl, isValidUrl, sanitizeText };
