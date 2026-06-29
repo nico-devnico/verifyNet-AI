@@ -1,8 +1,9 @@
-import Groq from 'groq-sdk';
-import { searchWeb, RELIABLE_SOURCES, fetchPageContent } from './webSearch.js';
+const Groq = require('groq-sdk');
+const { searchWeb, RELIABLE_SOURCES, fetchPageContent } = require('./webSearch');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
+// List of allowed models in priority order exactly as requested by user!
 const ALLOWED_MODELS = [
   'groq/compound',
   'groq/compound-mini',
@@ -19,6 +20,7 @@ function clamp(v) {
 async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048, requireJson = true) {
   let lastError;
 
+  // Truncate user message to prevent "Request too large" errors
   const truncatedUserMessage = userMessage.length > 3000 
     ? userMessage.substring(0, 3000) + "..." 
     : userMessage;
@@ -33,7 +35,7 @@ async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048
           { role: 'user', content: truncatedUserMessage },
         ],
         temperature: 0.1,
-        max_tokens: Math.min(maxTokens, 2048),
+        max_tokens: Math.min(maxTokens, 2048), // Reduced from 3500
         top_p: 0.9,
         response_format: requireJson ? { type: 'json_object' } : undefined,
       });
@@ -42,6 +44,7 @@ async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048
       if (!text) throw new Error('Empty response');
       
       if (requireJson) {
+        // Clean response
         text = text
           .replace(/<think>[\s\S]*?<\/think>/gi, '')
           .replace(/<tool>[\s\S]*?<\/tool>/gi, '')
@@ -49,6 +52,7 @@ async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048
           .replace(/```json|```/gi, '')
           .trim();
         
+        // Extract valid JSON
         const firstBrace = text.indexOf('{');
         const lastBrace = text.lastIndexOf('}');
         if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
@@ -62,7 +66,7 @@ async function callModelWithFallback(systemPrompt, userMessage, maxTokens = 2048
         return text;
       }
     } catch (err) {
-      console.warn(`[Model] Failed with ${modelId}:`, err.message);
+      console.warn(`[Model] Failed with ${modelId}: ${err.message}`);
       lastError = err;
     }
   }
@@ -81,6 +85,7 @@ Retourne UNIQUEMENT JSON :
   "language": "fr"
 }`;
   
+  // Truncate content to save tokens
   const truncatedContent = content.substring(0, 2000);
   let userMsg = `Contenu: ${truncatedContent}`;
   if (metadata.title) {
@@ -90,6 +95,7 @@ Retourne UNIQUEMENT JSON :
   try {
     return await callModelWithFallback(systemPrompt, userMsg, 256);
   } catch (err) {
+    // Fallback to simple extraction
     return {
       mainTopic: "Contenu à vérifier",
       country: null,
@@ -100,6 +106,7 @@ Retourne UNIQUEMENT JSON :
 }
 
 async function stepSummarizeSources(claim, searchResults) {
+  // Scrape top 2 reliable sources
   const sourcesToScrape = searchResults.reliableSources.slice(0, 2);
   const scrapedContents = [];
 
@@ -112,7 +119,7 @@ async function stepSummarizeSources(claim, searchResults) {
           title: source.title,
           domain: source.domain,
           url: source.url,
-          content: content.substring(0, 4000),
+          content: content.substring(0, 4000), // Limit content size
         });
       }
     } catch (err) {
@@ -124,6 +131,7 @@ async function stepSummarizeSources(claim, searchResults) {
     return null;
   }
 
+  // Generate summary
   const systemPrompt = `Tu es VerifyNet, expert en résumé de sources pour vérification d'informations.
 Rédige un résumé détaillé en français basé UNIQUEMENT sur les contenus fournis.
 Le résumé doit synthétiser les informations clés des sources et leur rapport avec l'affirmation.`;
@@ -139,9 +147,10 @@ Le résumé doit synthétiser les informations clés des sources et leur rapport
 }
 
 async function stepAnalyzeSources(claim, searchResults) {
+  // Reduce number of sources to save tokens
   const sourcesToAnalyze = [
-    ...searchResults.reliableSources.slice(0, 4),
-    ...searchResults.otherSources.slice(0, 2)
+    ...searchResults.reliableSources.slice(0, 4), // Reduced from 8 to 4
+    ...searchResults.otherSources.slice(0, 2)    // Reduced from 4 to 2
   ];
   
   const systemPrompt = `Tu es un expert en vérification.
@@ -157,6 +166,7 @@ Retourne JSON :
   "keyFindings": []
 }`;
   
+  // Simplify source data to save tokens
   const simplifiedSources = sourcesToAnalyze.map(s => ({
     url: s.url,
     domain: s.domain,
@@ -203,6 +213,7 @@ Retourne JSON :
   "recommendations": ["Vérifiez les sources", "Consultez plusieurs sources"]
 }`;
   
+  // Simplify data to save tokens
   const simplifiedSources = sourceAnalyses.sourceAnalyses?.slice(0, 3) || [];
   let userMsg = `Affirmation: ${claim}\nSources:${JSON.stringify(simplifiedSources)}`;
   
@@ -348,4 +359,4 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
   return finalResult;
 }
 
-export { analyzeWithFusion };
+module.exports = { analyzeWithFusion };

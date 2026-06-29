@@ -1,6 +1,6 @@
-import cheerio from 'cheerio';
-import { Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+const cheerio = require('cheerio');
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
 
 const BLOCKED_DOMAINS = ['facebook.com/login', 'twitter.com/i/flow/login'];
 
@@ -24,6 +24,7 @@ async function scrapeUrl(url) {
     throw new Error('URL invalide. Veuillez fournir une URL HTTP ou HTTPS.');
   }
 
+  // Block certain patterns
   if (BLOCKED_DOMAINS.some((d) => url.includes(d))) {
     throw new Error('Cette URL nécessite une authentification et ne peut pas être analysée.');
   }
@@ -55,6 +56,7 @@ async function scrapeUrl(url) {
 
     const html = await response.text();
 
+    // Use Readability for main content extraction
     const dom = new JSDOM(html, { url });
     const reader = new Readability(dom.window.document);
     const article = reader.parse();
@@ -70,7 +72,10 @@ async function scrapeUrl(url) {
       };
     }
 
+    // Fallback: Cheerio
     const $ = cheerio.load(html);
+
+    // Remove unwanted elements
     $('script, style, nav, header, footer, aside, .ad, .ads, .advertisement, .sidebar, .menu, .nav, .cookie, .popup, iframe, noscript').remove();
 
     const title = $('h1').first().text() || $('title').text() || '';
@@ -99,4 +104,4 @@ async function scrapeUrl(url) {
   }
 }
 
-export { scrapeUrl, isValidUrl, sanitizeText };
+module.exports = { scrapeUrl, isValidUrl, sanitizeText };
