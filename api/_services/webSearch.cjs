@@ -1,6 +1,6 @@
-import { getJson } from 'serpapi';
-import { Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+const { getJson } = require('serpapi');
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
 
 // Reliable sources list as per your specifications
 const RELIABLE_SOURCES = {
@@ -293,4 +293,4 @@ async function searchWeb(claim, mainTopic, country) {
   };
 }
 
-export { searchWeb, RELIABLE_SOURCES, generateSearchQueries, fetchPageContent, resolveFinalUrl, isValidUrl };
+module.exports = { searchWeb, RELIABLE_SOURCES, generateSearchQueries, fetchPageContent, resolveFinalUrl, isValidUrl };

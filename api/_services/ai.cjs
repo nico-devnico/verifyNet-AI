@@ -1,4 +1,4 @@
-import Groq from 'groq-sdk';
+const Groq = require('groq-sdk');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
@@ -78,4 +78,4 @@ function buildUserMessage(content, metadata) {
   return msg;
 }
 
-export { analyzeContent };
+module.exports = { analyzeContent };

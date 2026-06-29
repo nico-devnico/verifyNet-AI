@@ -1,5 +1,5 @@
-import Groq from 'groq-sdk';
-import { searchWeb, RELIABLE_SOURCES, fetchPageContent } from './webSearch.js';
+const Groq = require('groq-sdk');
+const { searchWeb, RELIABLE_SOURCES, fetchPageContent } = require('./webSearch.cjs');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
@@ -359,4 +359,4 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
   return finalResult;
 }
 
-export { analyzeWithFusion };
+module.exports = { analyzeWithFusion };

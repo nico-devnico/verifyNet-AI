@@ -1,6 +1,6 @@
-import cheerio from 'cheerio';
-import { Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+const cheerio = require('cheerio');
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
 
 const BLOCKED_DOMAINS = ['facebook.com/login', 'twitter.com/i/flow/login'];
 
@@ -104,4 +104,4 @@ async function scrapeUrl(url) {
   }
 }
 
-export { scrapeUrl, isValidUrl, sanitizeText };
+module.exports = { scrapeUrl, isValidUrl, sanitizeText };
