@@ -54,9 +54,7 @@ async function analyzeContent(content, metadata = {}) {
 
   try {
     const result = JSON.parse(responseText);
-    // Validate and clamp score
     result.score = Math.max(0, Math.min(100, Math.round(result.score || 50)));
-    // Ensure arrays exist
     if (!Array.isArray(result.claims)) result.claims = [];
     if (!Array.isArray(result.sources)) result.sources = [];
     if (!Array.isArray(result.recommendations)) result.recommendations = [];

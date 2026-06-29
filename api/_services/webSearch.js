@@ -2,10 +2,8 @@ const { getJson } = require('serpapi');
 const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 
-// Reliable sources list as per your specifications
 const RELIABLE_SOURCES = {
   high: [
-    // 🟢 Sources très fiables - Internationales
     'reuters.com',
     'apnews.com',
     'bbc.com',
@@ -15,14 +13,12 @@ const RELIABLE_SOURCES = {
     'lemonde.fr',
     'theguardian.com',
     'dw.com',
-    // 🟢 Sources Camerounaises reconnues
     'cameroon-tribune.cm',
     'journalducameroun.com',
     'actucameroun.com',
     'cameroon-info.net',
     'crtv.cm',
     'ecomatin.net',
-    // 🟢 Médias panafricains
     'africanews.com',
     'jeuneafrique.com',
     'theafricareport.com',
@@ -33,7 +29,6 @@ const RELIABLE_SOURCES = {
     'agi.africa',
   ],
   institutional: [
-    // 🟡 Sources institutionnelles/officielles - Internationales
     'who.int',
     'unesco.org',
     'worldbank.org',
@@ -44,17 +39,15 @@ const RELIABLE_SOURCES = {
     'us.gov',
     'europa.eu',
     'un.org',
-    // 🟡 Sources gouvernementales et officielles du Cameroun
-    'prc.cm', // Présidence de la République du Cameroun
-    'spm.gov.cm', // Services du Premier Ministre
-    'minsante.cm', // Ministère de la Santé Publique
-    'mincom.gov.cm', // Ministère de la Communication
-    'minebas.gov.cm', // Ministère de l'Éducation de Base
-    'minesec.gov.cm', // Ministère des Enseignements Secondaires
-    'elecam.cm', // Elections Cameroon (ELECAM)
+    'prc.cm',
+    'spm.gov.cm',
+    'minsante.cm',
+    'mincom.gov.cm',
+    'minebas.gov.cm',
+    'minesec.gov.cm',
+    'elecam.cm',
   ],
   scientific: [
-    // 🟠 Sources techniques et scientifiques
     'scholar.google.com',
     'nature.com',
     'sciencedirect.com',
@@ -62,19 +55,16 @@ const RELIABLE_SOURCES = {
     'arxiv.org',
   ],
   factchecking: [
-    // 🔵 Sources de vérification et fact-checking - Internationales
     'snopes.com',
     'politifact.com',
     'factcheck.org',
     'factcheck.afp.com',
     'fullfact.org',
-    // 🔵 Organismes Africains de Fact-Checking
     'africacheck.org',
     'pesacheck.org',
     'dubawa.org',
   ],
   useWithCaution: [
-    // 🔴 Sources à utiliser avec prudence
     'reddit.com',
     'wikipedia.org',
   ],
@@ -83,26 +73,22 @@ const RELIABLE_SOURCES = {
 function generateSearchQueries(claim, mainTopic, country) {
   const queries = [];
   
-  // Use mainTopic as fallback
   let searchQuery = claim;
   if (!searchQuery || searchQuery === 'null' || searchQuery.trim() === '') {
     searchQuery = mainTopic;
   }
   
-  // Add main query
   if (country) {
     queries.push(`${country} ${searchQuery}`);
   } else {
     queries.push(searchQuery);
   }
   
-  // Add related queries for context
   if (mainTopic) {
     queries.push(`${mainTopic} actualités`);
     queries.push(`${mainTopic} vérification`);
   }
   
-  // Add fact-checking focused queries
   queries.push(`${searchQuery} vérification`);
   queries.push(`${searchQuery} fact check`);
   
@@ -166,7 +152,6 @@ async function fetchPageContent(url) {
 }
 
 async function searchWeb(claim, mainTopic, country) {
-  // Fallback: use mainTopic if claim is invalid
   let searchClaim = claim;
   if (!searchClaim || searchClaim === 'null' || searchClaim.trim() === '') {
     searchClaim = mainTopic;
@@ -185,7 +170,6 @@ async function searchWeb(claim, mainTopic, country) {
   
   console.log(`[WebSearch] Performing real search for claim: "${claim}"`);
   
-  // Search for multiple queries (limit to 4 queries to stay within free tier)
   for (let qIndex = 0; qIndex < Math.min(queries.length, 4); qIndex++) {
     const query = queries[qIndex];
     
@@ -193,7 +177,7 @@ async function searchWeb(claim, mainTopic, country) {
       const searchResult = await getJson({
         q: query,
         api_key: apiKey,
-        num: 15, // More results per query
+        num: 15,
         hl: 'fr',
         gl: 'fr',
       });
@@ -203,7 +187,6 @@ async function searchWeb(claim, mainTopic, country) {
           searchResult.organic_results.map(result => {
             const domain = new URL(result.link).hostname;
             
-            // Determine source reliability tier
             let reliability = 'useWithCaution';
             if (RELIABLE_SOURCES.high.some(s => domain.includes(s))) {
               reliability = 'high';
@@ -232,7 +215,6 @@ async function searchWeb(claim, mainTopic, country) {
     }
   }
   
-  // Deduplicate results by URL
   const seenUrls = new Set();
   const uniqueResults = allResults.filter(result => {
     if (!isValidUrl(result.url)) return false;
@@ -241,7 +223,6 @@ async function searchWeb(claim, mainTopic, country) {
     return true;
   });
   
-  // Resolve final URLs (resolve redirects) - limit to 10 URLs to avoid long wait
   console.log(`[WebSearch] Resolving final URLs for ${Math.min(uniqueResults.length, 10)} sources...`);
   const resolvePromises = uniqueResults.slice(0, 10).map(async (result) => {
     try {
@@ -256,7 +237,6 @@ async function searchWeb(claim, mainTopic, country) {
   const remainingResults = uniqueResults.slice(10);
   const allResolvedResults = [...resolvedResults, ...remainingResults];
   
-  // Deduplicate again after URL resolution
   const finalSeenUrls = new Set();
   const finalUniqueResults = allResolvedResults.filter(result => {
     if (finalSeenUrls.has(result.url)) return false;
@@ -264,7 +244,6 @@ async function searchWeb(claim, mainTopic, country) {
     return true;
   });
   
-  // Separate reliable sources from others
   const reliableResults = finalUniqueResults.filter(result => 
     ['high', 'institutional', 'scientific', 'factchecking'].includes(result.reliability)
   ).slice(0, 25);
