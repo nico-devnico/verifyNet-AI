@@ -1,41 +1,57 @@
-const { analyzeWithFusion } = require('../_services/fusion');
-const { sanitizeText } = require('../_services/scraper');
-
+// Version ultra-simple pour diagnostic
 module.exports = async (req, res) => {
-  console.log('📥 [API] Requête reçue:', {
-    method: req.method,
-    url: req.url,
-    hasBody: !!req.body,
-  });
-
-  if (req.method !== 'POST') {
-    console.log('❌ [API] Méthode non autorisée:', req.method);
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   try {
-    const { text } = req.body;
-    console.log('📝 [API] Texte reçu:', text?.substring(0, 100) + '...');
+    console.log('📥 [API] Requête reçue');
 
-    if (!text || typeof text !== 'string' || text.trim().length < 20) {
-      console.log('❌ [API] Texte invalide:', { hasText: !!text, length: text?.length });
-      return res.status(400).json({ error: 'Le texte doit contenir au moins 20 caractères.' });
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const content = sanitizeText(text).slice(0, 5000);
-    console.log('🔍 [API] Début de l\'analyse...');
-    const result = await analyzeWithFusion(content, {});
-    console.log('✅ [API] Analyse terminée');
+    // Réponse simple sans dépendances externes
+    const result = {
+      mainTopic: "Analyse de test",
+      country: null,
+      claim: "Texte test",
+      topicSummary: "Analyse simplifiée",
+      finalScore: 50,
+      verdict: "Incertain",
+      analysis: {
+        verifiedFacts: [],
+        doubtfulPoints: [],
+        falseClaims: [],
+        missingContext: "Analyse simplifiée activée"
+      },
+      sourceComparison: {
+        totalSources: 3,
+        confirmingHighReliability: 0,
+        denyingHighReliability: 0,
+        neutralHighReliability: 3,
+        otherSources: 0
+      },
+      sourceDisagreements: [],
+      reasoning: "Mode diagnostic activé",
+      detailedConclusion: "L'analyse est en mode diagnostic. Vérifiez les variables d'environnement et les dépendances.",
+      recommendations: ["Vérifiez les clés API", "Activez le debug"],
+      consultedSources: [
+        { title: "BBC News", url: "https://bbc.com", domain: "bbc.com", reliabilityTier: "high", reliabilityLabel: "Très fiable" },
+        { title: "Le Monde", url: "https://lemonde.fr", domain: "lemonde.fr", reliabilityTier: "high", reliabilityLabel: "Très fiable" },
+        { title: "Reuters", url: "https://reuters.com", domain: "reuters.com", reliabilityTier: "high", reliabilityLabel: "Très fiable" }
+      ],
+      summary: "Mode diagnostic activé"
+    };
 
+    console.log('✅ [API] Réponse envoyée');
     res.json(result);
+
   } catch (err) {
-    console.error('❌ [API] Erreur:', {
+    console.error('❌ [API] Erreur fatale:', {
       message: err.message,
       stack: err.stack,
     });
     res.status(500).json({ 
-      error: err.message || 'Erreur interne du serveur',
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+      error: 'Erreur interne du serveur',
+      message: err.message,
+      details: err.stack 
     });
   }
 };
