@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
+import { logAuthAction } from '../utils/authErrors';
 
 const useStore = create(
   persist(
@@ -17,40 +18,83 @@ const useStore = create(
       setSession: (session) => set({ session }),
       setProfile: (profile) => set({ profile }),
       
-      // Load profile from database
+      // Load profile from database (with fallback creation if trigger fails)
       loadProfile: async () => {
         const { user } = get();
-        if (!user) return;
+        if (!user) {
+          console.log('⚠️ [Store] No user, skipping profile load');
+          return;
+        }
+        
+        console.log('📥 [Store] Loading profile for user:', user.id);
         
         try {
-          const { data, error } = await supabase
+          // First try to load existing profile
+          let { data, error } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', user.id)
             .single();
           
-          if (!error && data) {
+          if (error || !data) {
+            console.log('⚠️ [Store] Profile not found, trying to create it (fallback)...');
+            
+            // Fallback: create profile manually
+            const { data: newProfile, error: createError } = await supabase
+              .from('profiles')
+              .insert({
+                id: user.id,
+                email: user.email,
+                role: user.email === 'nicodevnico@gmail.com' ? 'super_admin' : 'user',
+                is_verified: user.email === 'nicodevnico@gmail.com'
+              })
+              .select('*')
+              .single();
+            
+            if (createError) {
+              console.error('❌ [Store] Failed to create fallback profile:', createError);
+              return;
+            }
+            
+            data = newProfile;
+            console.log('✅ [Store] Fallback profile created successfully:', data);
+          }
+          
+          if (data) {
+            console.log('✅ [Store] Profile loaded successfully:', data);
             set({ profile: data });
           }
         } catch (err) {
-          console.error('Error loading profile:', err);
+          console.error('❌ [Store] Exception loading profile:', err);
         }
       },
       
       signOut: async () => {
-        await supabase.auth.signOut();
-        set({ user: null, session: null, profile: null });
+        logAuthAction('Déconnexion demandée');
+        try {
+          await supabase.auth.signOut();
+          logAuthAction('Déconnexion réussie');
+          set({ user: null, session: null, profile: null });
+        } catch (err) {
+          logAuthAction('Erreur lors de la déconnexion', { error: err.message });
+          // Still clear state even if signOut fails
+          set({ user: null, session: null, profile: null });
+        }
       },
 
       // Check if user is admin or super admin
       isAdmin: () => {
-        const { profile } = get();
+        const { profile, user } = get();
+        // Fallback: vérifier l'email si le profil n'est pas chargé
+        if (user?.email === 'nicodevnico@gmail.com') return true;
         return profile?.role === 'admin' || profile?.role === 'super_admin';
       },
       
       // Check if user is super admin
       isSuperAdmin: () => {
-        const { profile } = get();
+        const { profile, user } = get();
+        // Fallback: vérifier l'email si le profil n'est pas chargé
+        if (user?.email === 'nicodevnico@gmail.com') return true;
         return profile?.role === 'super_admin';
       },
 

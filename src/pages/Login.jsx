@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, LogIn } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import useStore from '../store';
+import { formatAuthError, logAuthAction } from '../utils/authErrors';
 import './Auth.css';
 
 export default function Login() {
@@ -27,39 +28,65 @@ export default function Login() {
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
+    logAuthAction('Tentative de connexion email', { email });
     setLoading(true);
     setError('');
 
+    // Validation front-end
+    if (!email || !password) {
+      logAuthAction('Échec: champs manquants', { email: !!email, password: !!password });
+      setError('Veuillez remplir tous les champs.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      logAuthAction('Appel API signInWithPassword');
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        logAuthAction('Échec API signInWithPassword', { error: error.message });
+        throw error;
+      }
+
+      logAuthAction('Connexion réussie', { userId: data.user?.id });
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.message);
+      logAuthAction('Erreur connexion email', { error: err.message });
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    logAuthAction('Tentative de connexion Google');
+    const redirectUrl = `${window.location.origin}${from}`;
     setLoading(true);
     setError('');
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      logAuthAction('Appel API signInWithOAuth (Google)', { redirectUrl });
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}${from}`,
+          redirectTo: redirectUrl,
+          scopes: 'email profile'
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        logAuthAction('Échec OAuth Google', { error: error.message });
+        throw error;
+      }
+
+      logAuthAction('Redirection OAuth initiée', { provider: 'google' });
     } catch (err) {
-      setError(err.message);
+      logAuthAction('Erreur connexion Google', { error: err.message });
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }

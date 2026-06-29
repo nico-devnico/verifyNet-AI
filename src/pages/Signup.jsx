@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, UserPlus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import useStore from '../store';
+import { formatAuthError, logAuthAction } from '../utils/authErrors';
 import './Auth.css';
 
 export default function Signup() {
@@ -28,17 +29,35 @@ export default function Signup() {
 
   const handleEmailSignup = async (e) => {
     e.preventDefault();
+    logAuthAction('Tentative d\'inscription email', { email });
     setLoading(true);
     setError('');
 
+    // Validation front-end
+    if (!email || !password || !confirmPassword) {
+      logAuthAction('Échec: champs manquants');
+      setError('Veuillez remplir tous les champs.');
+      setLoading(false);
+      return;
+    }
+
     if (password !== confirmPassword) {
-      setError('Les mots de passe ne correspondent pas');
+      logAuthAction('Échec: mots de passe différents');
+      setError('Les mots de passe ne correspondent pas.');
+      setLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      logAuthAction('Échec: mot de passe trop court', { length: password.length });
+      setError('Le mot de passe doit contenir au moins 6 caractères.');
       setLoading(false);
       return;
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      logAuthAction('Appel API signUp');
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -46,30 +65,52 @@ export default function Signup() {
         },
       });
 
-      if (error) throw error;
-      navigate(from, { replace: true });
+      if (error) {
+        logAuthAction('Échec API signUp', { error: error.message });
+        throw error;
+      }
+
+      logAuthAction('Inscription réussie', { userId: data.user?.id, session: !!data.session });
+      
+      // If session is returned, user is already confirmed (email confirm disabled)
+      if (data.session) {
+        navigate(from, { replace: true });
+      } else {
+        setError('Un email de confirmation a été envoyé. Veuillez vérifier votre boîte mail.');
+      }
     } catch (err) {
-      setError(err.message);
+      logAuthAction('Erreur inscription email', { error: err.message });
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleSignup = async () => {
+    logAuthAction('Tentative d\'inscription Google');
+    const redirectUrl = `${window.location.origin}${from}`;
     setLoading(true);
     setError('');
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      logAuthAction('Appel API signInWithOAuth (Google)', { redirectUrl });
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}${from}`,
+          redirectTo: redirectUrl,
+          scopes: 'email profile'
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        logAuthAction('Échec OAuth Google (inscription)', { error: error.message });
+        throw error;
+      }
+
+      logAuthAction('Redirection OAuth initiée (inscription)', { provider: 'google' });
     } catch (err) {
-      setError(err.message);
+      logAuthAction('Erreur inscription Google', { error: err.message });
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }

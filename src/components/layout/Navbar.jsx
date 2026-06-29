@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sun, Moon, Menu, X, LogIn, CheckCircle, User, LogOut, Settings, Shield } from 'lucide-react';
+import { Sun, Moon, Menu, X, LogIn, CheckCircle, User, LogOut, Settings, Shield, Crown } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import useStore from '../../store';
 import './Navbar.css';
@@ -10,7 +10,7 @@ export default function Navbar() {
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, signOut, isAdmin } = useStore();
+  const { user, signOut, isAdmin, isSuperAdmin } = useStore();
   
   // Build nav links: Accueil and Analyser always visible; others only when authenticated
   const navLinks = [
@@ -19,7 +19,8 @@ export default function Navbar() {
     ...(user ? [
       { to: '/history', label: 'Historique' },
       { to: '/dashboard', label: 'Dashboard' },
-      ...(isAdmin() ? [{ to: '/admin', label: 'Admin' }] : [])
+      ...(isAdmin() ? [{ to: '/admin', label: 'Admin' }] : []),
+      ...(isSuperAdmin() ? [{ to: '/super-admin', label: 'Super Admin' }] : [])
     ] : [])
   ];
 
@@ -70,6 +71,12 @@ export default function Navbar() {
                   <Link to="/admin" className="user-dropdown-item">
                     <Shield size={16} />
                     Administration
+                  </Link>
+                )}
+                {isSuperAdmin() && (
+                  <Link to="/super-admin" className="user-dropdown-item">
+                    <Crown size={16} />
+                    Super Administration
                   </Link>
                 )}
                 <button className="user-dropdown-item" onClick={signOut}>
