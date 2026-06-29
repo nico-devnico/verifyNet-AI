@@ -1,5 +1,5 @@
-const Groq = require('groq-sdk');
-const { searchWeb, RELIABLE_SOURCES, fetchPageContent } = require('./webSearch');
+import Groq from 'groq-sdk';
+import { searchWeb, RELIABLE_SOURCES, fetchPageContent } from './webSearch.js';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
@@ -141,7 +141,7 @@ Le résumé doit synthétiser les informations clés des sources et leur rapport
   try {
     return await callModelWithFallback(systemPrompt, userMsg, 1000, false);
   } catch (err) {
-    console.error("[Summarize] Error generating source summary:", err);
+    console.error("[Summarize] Error generating source summary:", err.message);
     return null;
   }
 }
@@ -359,4 +359,4 @@ async function analyzeWithFusion(content, metadata = {}, onProgress = null) {
   return finalResult;
 }
 
-module.exports = { analyzeWithFusion };
+export { analyzeWithFusion };

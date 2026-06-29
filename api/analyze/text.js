@@ -1,7 +1,7 @@
-const { analyzeWithFusion } = require('../_services/fusion');
-const { sanitizeText } = require('../_services/scraper');
+import { analyzeWithFusion } from '../_services/fusion.js';
+import { sanitizeText } from '../_services/scraper.js';
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
