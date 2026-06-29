@@ -1,57 +1,46 @@
-// Version ultra-simple pour diagnostic
+const { analyzeWithFusion } = require('../_services/fusion');
+const { scrapeUrl, isValidUrl } = require('../_services/scraper');
+
 module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Méthode non autorisée' });
+  }
+  
   try {
-    console.log('📥 [API] URL Requête reçue');
-
-    if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Method not allowed' });
+    const { url } = req.body;
+    
+    if (!url || typeof url !== 'string' || !isValidUrl(url)) {
+      return res.status(400).json({ error: 'URL invalide.' });
     }
-
-    // Réponse simple sans dépendances externes
-    const result = {
-      mainTopic: "Analyse d'URL",
-      country: null,
-      claim: "URL test",
-      topicSummary: "Analyse simplifiée",
-      finalScore: 50,
-      verdict: "Incertain",
-      analysis: {
-        verifiedFacts: [],
-        doubtfulPoints: [],
-        falseClaims: [],
-        missingContext: "Analyse simplifiée activée"
-      },
-      sourceComparison: {
-        totalSources: 3,
-        confirmingHighReliability: 0,
-        denyingHighReliability: 0,
-        neutralHighReliability: 3,
-        otherSources: 0
-      },
-      sourceDisagreements: [],
-      reasoning: "Mode diagnostic activé",
-      detailedConclusion: "L'analyse est en mode diagnostic. Vérifiez les variables d'environnement et les dépendances.",
-      recommendations: ["Vérifiez les clés API", "Activez le debug"],
-      consultedSources: [
-        { title: "BBC News", url: "https://bbc.com", domain: "bbc.com", reliabilityTier: "high", reliabilityLabel: "Très fiable" },
-        { title: "Le Monde", url: "https://lemonde.fr", domain: "lemonde.fr", reliabilityTier: "high", reliabilityLabel: "Très fiable" },
-        { title: "Reuters", url: "https://reuters.com", domain: "reuters.com", reliabilityTier: "high", reliabilityLabel: "Très fiable" }
-      ],
-      summary: "Mode diagnostic activé"
-    };
-
-    console.log('✅ [API] Réponse envoyée');
-    res.json(result);
-
-  } catch (err) {
-    console.error('❌ [API] Erreur fatale:', {
-      message: err.message,
-      stack: err.stack,
+    
+    console.log('[API] Scraping URL:', url);
+    const scraped = await scrapeUrl(url.trim());
+    
+    console.log('[API] Starting URL analysis...');
+    const result = await analyzeWithFusion(scraped.content, {
+      title: scraped.title,
+      author: scraped.author,
+      date: scraped.date,
+      source: scraped.source,
+      url: scraped.url
+    }, ({ progress, step }) => {
+      console.log(`[API] Progress: ${progress}% - ${step}`);
     });
-    res.status(500).json({ 
-      error: 'Erreur interne du serveur',
-      message: err.message,
-      details: err.stack 
-    });
+    
+    console.log('[API] Analysis complete');
+    res.status(200).json(result);
+    
+  } catch (error) {
+    console.error('[API] Error:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
   }
 };
