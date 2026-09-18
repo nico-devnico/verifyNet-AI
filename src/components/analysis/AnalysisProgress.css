@@ -1,9 +1,24 @@
 .analysis-progress{max-width:500px;margin:40px auto}
 .progress-card{text-align:center;padding:48px 32px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl)}
-.progress-visual{margin-bottom:24px}
-.progress-ring{position:relative;display:inline-flex;align-items:center;justify-content:center}
-.progress-ring svg{position:absolute}
-.progress-percent{font-size:1.75rem;font-weight:800;color:var(--primary)}
+.progress-visual{margin-bottom:28px}
+.progress-ring{
+  position:relative;
+  width:176px;height:176px;
+  margin:0 auto;
+}
+.progress-ring svg{
+  position:absolute;inset:0;
+  width:176px;height:176px;
+  max-width:none;
+  overflow:visible;
+}
+.progress-percent{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:2.125rem;font-weight:800;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;
+  color:var(--primary);line-height:1;
+}
 .progress-step{font-size:1.0625rem;font-weight:600;color:var(--text);margin-bottom:28px}
 
 .progress-steps{display:flex;flex-direction:column;gap:12px;margin-bottom:24px;text-align:left}

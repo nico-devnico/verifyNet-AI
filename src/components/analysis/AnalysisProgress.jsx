@@ -2,6 +2,9 @@ import { motion } from 'framer-motion';
 import { FileText, Search, Brain, ShieldCheck, FileOutput } from 'lucide-react';
 import './AnalysisProgress.css';
 
+/** Circonférence de l'anneau (r = 74) : le pourcentage doit tenir dans le disque intérieur. */
+const RING = 2 * Math.PI * 74;
+
 const steps = [
   { Icon: FileText, label: 'Extraction infos clés' },
   { Icon: Search, label: 'Recherche web' },
@@ -18,15 +21,22 @@ export default function AnalysisProgress({ progress, step }) {
       <div className="progress-card">
         {/* Animated loader */}
         <div className="progress-visual">
-          <div className="progress-ring">
-            <svg width="120" height="120" viewBox="0 0 120 120">
-              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--border)" strokeWidth="8" />
+          <div
+            className="progress-ring"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress)}
+            aria-label="Progression de l’analyse"
+          >
+            <svg viewBox="0 0 176 176">
+              <circle cx="88" cy="88" r="74" fill="none" stroke="var(--border)" strokeWidth="11" />
               <motion.circle
-                cx="60" cy="60" r="52" fill="none" stroke="var(--primary)" strokeWidth="8"
-                strokeLinecap="round" strokeDasharray={326.7}
-                animate={{ strokeDashoffset: 326.7 - (326.7 * progress) / 100 }}
+                cx="88" cy="88" r="74" fill="none" stroke="var(--primary)" strokeWidth="11"
+                strokeLinecap="round" strokeDasharray={RING}
+                animate={{ strokeDashoffset: RING - (RING * progress) / 100 }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
-                transform="rotate(-90 60 60)"
+                transform="rotate(-90 88 88)"
               />
             </svg>
             <span className="progress-percent">{Math.round(progress)}%</span>
