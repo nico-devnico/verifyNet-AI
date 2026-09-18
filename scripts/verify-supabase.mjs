@@ -382,7 +382,8 @@ async function finish(userId = null, admin = null) {
       `  supabase/migrations/0002_admin_rpc.sql\n` +
       `  supabase/migrations/0003_audit_hardening.sql\n` +
       `  supabase/migrations/0004_visitor_visibility.sql\n` +
-      `  supabase/migrations/0005_admin_visibility_fixes.sql${C.reset}`
+      `  supabase/migrations/0005_admin_visibility_fixes.sql\n` +
+      `  supabase/migrations/0006_admin_account_sync.sql${C.reset}`
     );
   }
 

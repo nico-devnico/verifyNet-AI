@@ -20,7 +20,7 @@ const ROLE_META = {
 };
 
 export default function UsersTab() {
-  const { user: currentUser } = useStore();
+  const { user: currentUser, profile } = useStore();
 
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -35,17 +35,21 @@ export default function UsersTab() {
 
   const [authInfo, setAuthInfo] = useState({});
   const [serviceRoleAvailable, setServiceRoleAvailable] = useState(true);
+  const [orphans, setOrphans] = useState([]);
 
   const [manage, setManage] = useState(null);     // utilisateur en cours de gestion
   const [confirm, setConfirm] = useState(null);   // { action, user, … }
   const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
+  /* Recherche : debounce, sans retarder le tout premier chargement (debounced vaut déjà ''). */
   useEffect(() => {
+    if (search === debounced) return undefined;
     const timer = setTimeout(() => { setDebounced(search); setPage(0); }, 350);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, debounced]);
 
+  /** Liste des profils via RPC Supabase — affichée immédiatement. */
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -57,32 +61,46 @@ export default function UsersTab() {
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       });
-      setRows(items);
-      setTotal(count);
+      setRows(items || []);
+      setTotal(count || 0);
     } catch (err) {
       setError(err.message);
+      setRows([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
   }, [debounced, roleFilter, statusFilter, page]);
 
-  useEffect(() => { load(); }, [load]);
-
-  /* Informations d'authentification (dernière connexion) : nécessite service_role. */
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { users } = await admin.fetchAuthInfo();
-        if (cancelled) return;
-        setAuthInfo(Object.fromEntries(users.map((u) => [u.id, u])));
-        setServiceRoleAvailable(true);
-      } catch (err) {
-        if (!cancelled && err.code === 'SERVICE_ROLE_MISSING') setServiceRoleAvailable(false);
-      }
-    })();
-    return () => { cancelled = true; };
+    load();
+  }, [load, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Enrichissement Auth en arrière-plan (dernière connexion, emails, orphelins).
+   * Ne bloque jamais l’affichage de la liste.
+   */
+  const refreshAuth = useCallback(async () => {
+    try {
+      const { users, orphans: ghostProfiles } = await admin.fetchAuthInfo();
+      const byId = Object.fromEntries((users || []).map((u) => [u.id, u]));
+      setAuthInfo(byId);
+      setServiceRoleAvailable(true);
+      if (Array.isArray(ghostProfiles)) setOrphans(ghostProfiles);
+      setRows((prev) => prev.map((row) => {
+        const auth = byId[row.id];
+        return auth?.email && auth.email !== row.email
+          ? { ...row, email: auth.email }
+          : row;
+      }));
+    } catch (err) {
+      if (err.code === 'SERVICE_ROLE_MISSING') setServiceRoleAvailable(false);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshAuth();
+  }, [refreshAuth]);
 
   /* Garde l'utilisateur affiché dans la fenêtre de gestion synchronisé. */
   const manageRow = useMemo(
@@ -97,6 +115,7 @@ export default function UsersTab() {
       await fn();
       toast.success(label);
       await load();
+      await refreshAuth();
       setConfirm(null);
       if (closeManage) setManage(null);
     } catch (err) {
@@ -116,7 +135,10 @@ export default function UsersTab() {
           <p>{total} compte{total !== 1 ? 's' : ''} — rôles, suspensions et quotas appliqués en base.</p>
         </div>
         <div className="row">
-          <button className="btn btn-secondary btn-sm" onClick={load}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={async () => { await load(); await refreshAuth(); }}
+          >
             <RefreshCw size={14} /> Rafraîchir
           </button>
           <button
@@ -144,6 +166,46 @@ export default function UsersTab() {
               <code> SUPABASE_SERVICE_ROLE_KEY </code>
               dans <code>server/.env</code>.
             </p>
+          </div>
+        </div>
+      )}
+
+      {orphans.length > 0 && (
+        <div className="alert alert-warning">
+          <AlertTriangle size={17} />
+          <div>
+            <strong>
+              {orphans.length} compte{orphans.length > 1 ? 's' : ''} fantôme
+              {orphans.length > 1 ? 's' : ''}
+            </strong>
+            <p>
+              Présent{orphans.length > 1 ? 's' : ''} dans la table <code>profiles</code> mais
+              absent{orphans.length > 1 ? 's' : ''} d’Authentication (
+              {orphans.slice(0, 4).map((o) => o.email).join(', ')}
+              {orphans.length > 4 ? ` et ${orphans.length - 4} autre(s)` : ''}).
+              Ils n’apparaissent plus dans la liste ci-dessous.
+            </p>
+            <button
+              className="btn btn-secondary btn-sm"
+              style={{ marginTop: 10 }}
+              disabled={busy}
+              onClick={() =>
+                setConfirm({
+                  title: 'Supprimer les comptes fantômes ?',
+                  message:
+                    `${orphans.length} profil(s) sans compte Auth seront retirés de la base. ` +
+                    'Les analyses associées à ces profils seront également supprimées.',
+                  confirmLabel: 'Nettoyer',
+                  onConfirm: () =>
+                    run(
+                      `${orphans.length} profil(s) orphelin(s) supprimé(s).`,
+                      () => admin.purgeOrphanProfiles()
+                    ),
+                })
+              }
+            >
+              <Trash2 size={14} /> Nettoyer la base
+            </button>
           </div>
         </div>
       )}
@@ -226,6 +288,7 @@ export default function UsersTab() {
                 const role = ROLE_META[row.role] || ROLE_META.user;
                 const auth = authInfo[row.id];
                 const lastSeen = row.last_seen_at || auth?.last_sign_in_at;
+                const email = auth?.email || row.email;
 
                 return (
                   <tr key={row.id} className={row.is_root ? 'sa-row-root' : ''}>
@@ -235,7 +298,7 @@ export default function UsersTab() {
                           {row.email?.charAt(0).toUpperCase()}
                         </span>
                         <span>
-                          <strong>{row.email}</strong>
+                          <strong>{email}</strong>
                           <small>
                             {[row.first_name, row.last_name].filter(Boolean).join(' ') ||
                               row.username ||
@@ -339,7 +402,7 @@ export default function UsersTab() {
       <CreateUserModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={async () => { setCreateOpen(false); await load(); }}
+        onCreated={async () => { setCreateOpen(false); await load(); await refreshAuth(); }}
       />
 
       {/* Confirmations destructives */}
@@ -548,7 +611,7 @@ function ManageUserModal({
                   className="btn btn-secondary btn-sm"
                   disabled={busy || !newEmail}
                   onClick={() =>
-                    onAction('Email modifié.', () => admin.changeUserEmail(row.id, newEmail))
+                    onAction('Email modifié.', () => admin.changeUserEmail(row.id, newEmail.trim()))
                   }
                 >
                   <Mail size={14} /> Modifier

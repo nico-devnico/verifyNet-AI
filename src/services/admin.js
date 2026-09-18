@@ -31,7 +31,13 @@ function toFriendlyError(error) {
   if (/could not find the function|does not exist/i.test(raw)) {
     return new Error(
       'Fonction absente en base. Exécutez les migrations supabase/migrations/ ' +
-      '(0001 à 0005) dans le SQL Editor de Supabase, dans cet ordre.'
+      '(0001 à 0007) dans le SQL Editor de Supabase, dans cet ordre.'
+    );
+  }
+  if (/structure of query does not match|result type/i.test(raw)) {
+    return new Error(
+      'Fonction admin_list_users désynchronisée. Exécutez ' +
+      'supabase/migrations/0007_fix_admin_list_users.sql dans le SQL Editor.'
     );
   }
   // Les messages de nos fonctions sont préfixés CODE: message
@@ -50,15 +56,91 @@ async function rpc(fn, params = {}) {
 /* -------------------------------------------------------------------------- */
 
 export async function listUsers({ search = '', role = '', status = '', limit = 50, offset = 0 } = {}) {
-  const rows = await rpc('admin_list_users', {
+  const rpcParams = {
     p_search: search || null,
     p_role: role || null,
     p_status: status || null,
     p_limit: limit,
     p_offset: offset,
-  });
-  return { items: rows || [], total: rows?.[0]?.total_count ?? 0 };
+  };
+
+  const { data, error } = await supabase.rpc('admin_list_users', rpcParams);
+  if (!error) {
+    return {
+      items: data || [],
+      total: Number(data?.[0]?.total_count ?? 0),
+      orphans: [],
+    };
+  }
+
+  const raw = error.message || '';
+  /* RPC cassée / absente → on lit profiles directement pour ne pas bloquer l’UI. */
+  if (/structure of query|result type|could not find|does not exist/i.test(raw)) {
+    return listUsersFromProfiles({ search, role, status, limit, offset });
+  }
+
+  throw toFriendlyError(error);
 }
+
+async function listUsersFromProfiles({ search = '', role = '', status = '', limit = 50, offset = 0 } = {}) {
+  let query = supabase
+    .from('profiles')
+    .select(
+      'id, email, role, username, first_name, last_name, avatar_url, is_verified, is_suspended, suspended_at, suspension_reason, daily_quota_override, last_seen_at, created_at',
+      { count: 'exact' }
+    )
+    .order('created_at', { ascending: false })
+    .range(offset, offset + Math.max(limit, 1) - 1);
+
+  if (search.trim()) {
+    const term = search.trim().replace(/[%_,]/g, '');
+    const q = `%${term}%`;
+    query = query.or(
+      `email.ilike.${q},username.ilike.${q},first_name.ilike.${q},last_name.ilike.${q}`
+    );
+  }
+  if (role) query = query.eq('role', role);
+  if (status === 'suspended') query = query.eq('is_suspended', true);
+  if (status === 'active') query = query.eq('is_suspended', false);
+
+  const { data, error, count } = await query;
+  if (error) throw toFriendlyError(error);
+
+  const ids = (data || []).map((row) => row.id);
+  const counts = new Map();
+  if (ids.length) {
+    const { data: analyses } = await supabase
+      .from('analyses')
+      .select('user_id, created_at')
+      .in('user_id', ids);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
+    for (const row of analyses || []) {
+      const cur = counts.get(row.user_id) || { total: 0, today: 0 };
+      cur.total += 1;
+      if (row.created_at && new Date(row.created_at).getTime() >= todayMs) cur.today += 1;
+      counts.set(row.user_id, cur);
+    }
+  }
+
+  return {
+    items: (data || []).map((row) => {
+      const stats = counts.get(row.id) || { total: 0, today: 0 };
+      return {
+        ...row,
+        analyses_count: stats.total,
+        analyses_today: stats.today,
+        is_root: false,
+      };
+    }),
+    total: count || 0,
+    orphans: [],
+  };
+}
+
+export const purgeOrphanProfiles = () =>
+  apiFetch('/admin/users/purge-orphans', { method: 'POST' });
 
 export const setUserRole = (userId, role) =>
   rpc('admin_set_user_role', { p_user_id: userId, p_role: role });

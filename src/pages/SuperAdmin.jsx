@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, lazy, Suspense, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -8,29 +8,39 @@ import {
 import useStore from '../store';
 import './SuperAdmin.css';
 
+/* Onglet Utilisateurs chargé en priorité : c'est la destination par défaut. */
+import UsersTab from './superadmin/UsersTab';
+
 const OverviewTab = lazy(() => import('./superadmin/OverviewTab'));
-const UsersTab = lazy(() => import('./superadmin/UsersTab'));
 const ContentTab = lazy(() => import('./superadmin/ContentTab'));
 const SettingsTab = lazy(() => import('./superadmin/SettingsTab'));
 const AuditTab = lazy(() => import('./superadmin/AuditTab'));
 const BroadcastTab = lazy(() => import('./superadmin/BroadcastTab'));
 
 const TABS = [
-  { id: 'overview', label: 'Vue d’ensemble', icon: BarChart3, Component: OverviewTab },
-  { id: 'users', label: 'Utilisateurs', icon: Users, Component: UsersTab },
-  { id: 'content', label: 'Contenus', icon: Database, Component: ContentTab },
-  { id: 'settings', label: 'Paramètres', icon: Settings, Component: SettingsTab },
-  { id: 'broadcast', label: 'Diffusion', icon: Megaphone, Component: BroadcastTab },
-  { id: 'audit', label: 'Journal d’audit', icon: Activity, Component: AuditTab },
+  { id: 'overview', label: 'Vue d’ensemble', icon: BarChart3, Component: OverviewTab, eager: false },
+  { id: 'users', label: 'Utilisateurs', icon: Users, Component: UsersTab, eager: true },
+  { id: 'content', label: 'Contenus', icon: Database, Component: ContentTab, eager: false },
+  { id: 'settings', label: 'Paramètres', icon: Settings, Component: SettingsTab, eager: false },
+  { id: 'broadcast', label: 'Diffusion', icon: Megaphone, Component: BroadcastTab, eager: false },
+  { id: 'audit', label: 'Journal d’audit', icon: Activity, Component: AuditTab, eager: false },
 ];
 
 export default function SuperAdmin() {
   const { user, profile, isSuperAdmin } = useStore();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('users');
+  const [visited, setVisited] = useState(() => new Set(['users']));
+
+  useEffect(() => {
+    setVisited((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
 
   if (!isSuperAdmin()) return <Navigate to="/" replace />;
-
-  const ActiveComponent = TABS.find((t) => t.id === activeTab)?.Component ?? OverviewTab;
 
   return (
     <div className="sa-page">
@@ -76,16 +86,42 @@ export default function SuperAdmin() {
         </nav>
 
         <div className="sa-content" role="tabpanel">
-          <Suspense
-            fallback={
-              <div className="sa-loading">
-                <Loader2 size={30} className="spinner" />
-                <p>Chargement…</p>
-              </div>
+          {TABS.map((t) => {
+            if (!visited.has(t.id)) return null;
+            const hidden = t.id !== activeTab;
+            const Comp = t.Component;
+
+            if (t.eager) {
+              return (
+                <div
+                  key={t.id}
+                  hidden={hidden}
+                  style={hidden ? { display: 'none' } : undefined}
+                >
+                  <Comp />
+                </div>
+              );
             }
-          >
-            <ActiveComponent />
-          </Suspense>
+
+            return (
+              <div
+                key={t.id}
+                hidden={hidden}
+                style={hidden ? { display: 'none' } : undefined}
+              >
+                <Suspense
+                  fallback={
+                    <div className="sa-loading">
+                      <Loader2 size={30} className="spinner" />
+                      <p>Chargement…</p>
+                    </div>
+                  }
+                >
+                  <Comp />
+                </Suspense>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

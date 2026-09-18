@@ -156,6 +156,8 @@ Ouvrir le **SQL Editor** du projet Supabase et exécuter les migrations
 | `supabase/migrations/0003_audit_hardening.sql` | Scelle la piste d'audit |
 | `supabase/migrations/0004_visitor_visibility.sql` | Enregistre l'activité des visiteurs sans compte |
 | `supabase/migrations/0005_admin_visibility_fixes.sql` | Journal d'audit et analyses anonymes visibles dans la console |
+| `supabase/migrations/0006_admin_account_sync.sql` | Aligne profils et comptes Auth : suppression, email, comptes fantômes |
+| `supabase/migrations/0007_fix_admin_list_users.sql` | Corrige l’erreur « structure of query does not match » sur la liste utilisateurs |
 
 Les scripts sont idempotents : les rejouer ne détruit aucune donnée et
 n'écrase pas un réglage déjà personnalisé.

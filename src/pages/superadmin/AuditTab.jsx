@@ -35,7 +35,7 @@ const ACTION_LABELS = {
   ADMIN_USER_EMAIL_CHANGED: 'Email modifié',
   ADMIN_SESSIONS_REVOKED: 'Sessions révoquées',
   ANONYMOUS_ANALYSIS: 'Analyse d’un visiteur',
-  ADMIN_ANONYMOUS_PURGED: 'Analyses anonymes purgées',
+  ADMIN_ORPHAN_PROFILES_PURGED: 'Profils orphelins nettoyés',
 };
 
 export default function AuditTab() {

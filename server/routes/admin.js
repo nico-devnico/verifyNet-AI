@@ -42,6 +42,69 @@ async function isRootAccount(email) {
   return root && email.toLowerCase() === root.toLowerCase();
 }
 
+function isAuthNotFound(err) {
+  if (!err) return false;
+  const status = err.status || err.statusCode;
+  const msg = String(err.message || err.error || '');
+  return status === 404 || /user not found|unable to find user|not found/i.test(msg);
+}
+
+/** Parcourt toutes les pages de l'API Auth Admin (plafond de sécurité : 10 000). */
+async function listAllAuthUsers() {
+  const users = [];
+  const perPage = 200;
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    const batch = data?.users || [];
+    users.push(...batch);
+    if (batch.length < perPage) break;
+  }
+  return users;
+}
+
+/** Agrège le nombre d'analyses par utilisateur (pagination PostgREST 1000). */
+async function loadAnalysisCounts() {
+  const counts = new Map();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayMs = today.getTime();
+  const pageSize = 1000;
+
+  for (let from = 0; from < 50000; from += pageSize) {
+    const { data, error } = await admin
+      .from('analyses')
+      .select('user_id, created_at')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    for (const row of data || []) {
+      if (!row.user_id) continue;
+      const cur = counts.get(row.user_id) || { total: 0, today: 0 };
+      cur.total += 1;
+      if (row.created_at && new Date(row.created_at).getTime() >= todayMs) cur.today += 1;
+      counts.set(row.user_id, cur);
+    }
+    if (!data || data.length < pageSize) break;
+  }
+  return counts;
+}
+
+/**
+ * Retire le profil même si la cascade Auth → profiles est absente.
+ * Les analyses du compte sont supprimées (et non détachées) : la contrainte
+ * analyses_visitor_identified interdit un user_id nul sans visitor_hash.
+ */
+async function deleteProfileRow(id) {
+  const { error: analysesError } = await admin.from('analyses').delete().eq('user_id', id);
+  if (analysesError) console.warn('[Admin] Analyses non supprimées :', analysesError.message);
+  await admin.from('notifications').delete().eq('user_id', id);
+  await admin.from('user_preferences').delete().eq('user_id', id);
+  const { error } = await admin.from('profiles').delete().eq('id', id);
+  if (error && !/no rows|not found|0 rows/i.test(error.message || '')) {
+    throw error;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Diagnostic                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -117,6 +180,39 @@ router.get('/diagnostics', async (req, res) => {
      * entrées et le journal cesse d'être une preuve.
      */
     try {
+      const { data, error } = await client.rpc('admin_account_health');
+      const missing = error && /does not exist|could not find/i.test(error.message);
+      if (missing) {
+        try {
+          const authUsers = await listAllAuthUsers();
+          const { data: profiles } = await client.from('profiles').select('id');
+          const authIds = new Set(authUsers.map((u) => u.id));
+          const orphanCount = (profiles || []).filter((p) => !authIds.has(p.id)).length;
+          push('Comptes Auth ↔ profils', orphanCount === 0,
+            orphanCount === 0
+              ? `${authUsers.length} compte(s) Auth — exécutez 0006 pour sceller la cascade`
+              : `${orphanCount} profil(s) orphelin(s) — exécutez 0006_admin_account_sync.sql`);
+        } catch (fallbackErr) {
+          push('Comptes Auth ↔ profils', false,
+            'Introuvable — exécutez 0006_admin_account_sync.sql');
+        }
+      } else if (error) {
+        push('Comptes Auth ↔ profils', false, error.message);
+      } else {
+        const orphans = data?.orphan_profiles || 0;
+        const missingProfiles = data?.missing_profiles || 0;
+        const mismatches = data?.email_mismatches || 0;
+        const ok = orphans === 0 && missingProfiles === 0 && mismatches === 0;
+        push('Comptes Auth ↔ profils', ok,
+          ok
+            ? `${data?.auth_users || 0} compte(s) Auth aligné(s) sur les profils`
+            : `${orphans} profil(s) orphelin(s), ${missingProfiles} profil(s) manquant(s), ${mismatches} email(s) désynchronisé(s) — exécutez 0006_admin_account_sync.sql`);
+      }
+    } catch (err) {
+      push('Comptes Auth ↔ profils', false, err.message);
+    }
+
+    try {
       const { data, error } = await client.rpc('audit_write_policy_count');
       if (error && /does not exist|could not find/i.test(error.message)) {
         push('Piste d\'audit scellée', false,
@@ -146,30 +242,170 @@ router.get('/diagnostics', async (req, res) => {
 /* Comptes utilisateurs                                                        */
 /* -------------------------------------------------------------------------- */
 
+function serializeAuthUser(u) {
+  return {
+    id: u.id,
+    email: u.email,
+    last_sign_in_at: u.last_sign_in_at,
+    email_confirmed_at: u.email_confirmed_at,
+    created_at: u.created_at,
+    providers: u.app_metadata?.providers || [],
+    banned_until: u.banned_until || null,
+  };
+}
+
 /**
  * Enrichit la liste des profils avec les données d'authentification que
  * `profiles` ne contient pas (dernière connexion, email confirmé, provider).
+ * Renvoie aussi les profils orphelins (présents en base, absents d'Auth).
  */
 router.get('/users/auth-info', requireServiceRole, async (_req, res, next) => {
   try {
-    const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    if (error) throw error;
+    const [users, profilesRes] = await Promise.all([
+      listAllAuthUsers(),
+      admin.from('profiles').select('id, email, role, created_at'),
+    ]);
+    if (profilesRes.error) throw profilesRes.error;
+
+    const authIds = new Set(users.map((u) => u.id));
+    const orphans = (profilesRes.data || [])
+      .filter((p) => !authIds.has(p.id))
+      .map((p) => ({ id: p.id, email: p.email, role: p.role, created_at: p.created_at }));
 
     res.json({
-      users: data.users.map((u) => ({
-        id: u.id,
-        email: u.email,
-        last_sign_in_at: u.last_sign_in_at,
-        email_confirmed_at: u.email_confirmed_at,
-        created_at: u.created_at,
-        providers: u.app_metadata?.providers || [],
-        banned_until: u.banned_until || null,
-      })),
+      users: users.map(serializeAuthUser),
+      orphans,
     });
   } catch (err) {
     next(err);
   }
 });
+
+/**
+ * Liste canonique : intersection Auth ∩ profils, email lu depuis Auth.
+ * Les profils sans compte Auth sont renvoyés à part (orphans) pour nettoyage.
+ */
+router.get('/users', requireServiceRole, async (req, res, next) => {
+  try {
+    const search = String(req.query.search || '').trim().toLowerCase();
+    const role = String(req.query.role || '').trim();
+    const status = String(req.query.status || '').trim();
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 50, 200));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const rootEmail = (await settings.getString('root_super_admin_email', '')).toLowerCase();
+
+    const [authUsers, profilesRes, counts] = await Promise.all([
+      listAllAuthUsers(),
+      admin.from('profiles').select(
+        'id, email, role, username, first_name, last_name, avatar_url, is_verified, is_suspended, suspended_at, suspension_reason, daily_quota_override, last_seen_at, created_at'
+      ),
+      loadAnalysisCounts(),
+    ]);
+
+    if (profilesRes.error) throw profilesRes.error;
+
+    const profileById = new Map((profilesRes.data || []).map((p) => [p.id, p]));
+    const authById = new Map(authUsers.map((u) => [u.id, u]));
+
+    const orphans = (profilesRes.data || [])
+      .filter((p) => !authById.has(p.id))
+      .map((p) => ({ id: p.id, email: p.email, role: p.role, created_at: p.created_at }));
+
+    const items = [];
+    for (const u of authUsers) {
+      const p = profileById.get(u.id);
+      const stats = counts.get(u.id) || { total: 0, today: 0 };
+      const email = u.email || p?.email || '';
+      const row = {
+        id: u.id,
+        email,
+        role: p?.role || 'user',
+        username: p?.username || null,
+        first_name: p?.first_name || null,
+        last_name: p?.last_name || null,
+        avatar_url: p?.avatar_url || null,
+        is_verified: p?.is_verified ?? Boolean(u.email_confirmed_at),
+        is_suspended: Boolean(p?.is_suspended),
+        suspended_at: p?.suspended_at || null,
+        suspension_reason: p?.suspension_reason || null,
+        daily_quota_override: p?.daily_quota_override ?? null,
+        last_seen_at: p?.last_seen_at || u.last_sign_in_at || null,
+        created_at: p?.created_at || u.created_at,
+        analyses_count: stats.total,
+        analyses_today: stats.today,
+        is_root: Boolean(rootEmail && email.toLowerCase() === rootEmail),
+        has_auth_account: true,
+        has_profile: Boolean(p),
+      };
+
+      if (search) {
+        const blob = [row.email, row.username, row.first_name, row.last_name]
+          .filter(Boolean).join(' ').toLowerCase();
+        if (!blob.includes(search)) continue;
+      }
+      if (role && row.role !== role) continue;
+      if (status === 'suspended' && !row.is_suspended) continue;
+      if (status === 'active' && row.is_suspended) continue;
+      items.push(row);
+    }
+
+    const rank = (r) => (r.role === 'super_admin' ? 0 : r.role === 'admin' ? 1 : 2);
+    items.sort((a, b) => rank(a) - rank(b) || new Date(b.created_at) - new Date(a.created_at));
+
+    res.json({
+      items: items.slice(offset, offset + limit),
+      total: items.length,
+      orphans,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Supprime les profils sans compte Auth (données de démo, cascades manquées). */
+router.post('/users/purge-orphans', requireServiceRole, async (req, res, next) => {
+  try {
+    const authUsers = await listAllAuthUsers();
+    const authIds = new Set(authUsers.map((u) => u.id));
+    const { data: profiles, error } = await admin.from('profiles').select('id, email, role');
+    if (error) throw error;
+
+    const removed = [];
+    for (const p of profiles || []) {
+      if (authIds.has(p.id)) continue;
+      if (await isRootAccount(p.email)) continue;
+      await deleteProfileRow(p.id);
+      removed.push({ id: p.id, email: p.email });
+    }
+
+    await audit(req, 'ADMIN_ORPHAN_PROFILES_PURGED', {
+      deleted: removed.length,
+      emails: removed.map((r) => r.email),
+    });
+    res.json({ deleted: removed.length, emails: removed.map((r) => r.email) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+async function ensureProfile(user, role = 'user') {
+  const payload = {
+    id: user.id,
+    email: user.email,
+    role,
+    is_verified: Boolean(user.email_confirmed_at) || role !== 'user',
+  };
+  const { data: existing } = await admin.from('profiles').select('id, role').eq('id', user.id).maybeSingle();
+  if (!existing) {
+    const { error } = await admin.from('profiles').insert(payload);
+    if (error) console.warn('[Admin] Profil non créé :', error.message);
+    return;
+  }
+  const patch = { email: user.email };
+  if (role !== 'user' && existing.role !== role) patch.role = role;
+  const { error } = await admin.from('profiles').update(patch).eq('id', user.id);
+  if (error) console.warn('[Admin] Profil non aligné :', error.message);
+}
 
 /** Création d'un compte par le super admin (avec rôle initial). */
 router.post('/users', requireServiceRole, async (req, res, next) => {
@@ -205,10 +441,7 @@ router.post('/users', requireServiceRole, async (req, res, next) => {
       created = data.user;
     }
 
-    if (role !== 'user') {
-      const { error } = await admin.from('profiles').update({ role }).eq('id', created.id);
-      if (error) console.warn('[Admin] Rôle initial non appliqué :', error.message);
-    }
+    await ensureProfile(created, role);
 
     await audit(req, 'ADMIN_USER_CREATED', { email, role, invited: sendInvite }, 'critical', created.id);
     res.status(201).json({ user: { id: created.id, email: created.email }, invited: sendInvite });
@@ -217,7 +450,7 @@ router.post('/users', requireServiceRole, async (req, res, next) => {
   }
 });
 
-/** Suppression définitive : supprime auth.users, ce qui cascade sur profiles. */
+/** Suppression définitive : Auth d'abord, puis le profil s'il reste. */
 router.delete('/users/:id', requireServiceRole, async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -229,18 +462,28 @@ router.delete('/users/:id', requireServiceRole, async (req, res, next) => {
     const { data: profile } = await admin
       .from('profiles').select('email, role').eq('id', id).maybeSingle();
 
-    if (await isRootAccount(profile?.email)) {
+    let authEmail = profile?.email || null;
+    try {
+      const { data: authData } = await admin.auth.admin.getUserById(id);
+      authEmail = authData?.user?.email || authEmail;
+    } catch {
+      // Compte déjà absent d'Auth : on continue pour retirer le profil.
+    }
+
+    if (await isRootAccount(authEmail) || await isRootAccount(profile?.email)) {
       return res.status(403).json({ error: 'Le super administrateur racine ne peut pas être supprimé.' });
     }
 
-    // L'audit est écrit AVANT la suppression : la contrainte ON DELETE SET NULL
-    // conserverait une ligne sans identité si on le faisait après.
-    await audit(req, 'ADMIN_USER_DELETED', { user_id: id, email: profile?.email, role: profile?.role });
+    await audit(req, 'ADMIN_USER_DELETED', {
+      user_id: id, email: authEmail, role: profile?.role,
+    });
 
-    const { error } = await admin.auth.admin.deleteUser(id);
-    if (error) throw error;
+    const { error: authError } = await admin.auth.admin.deleteUser(id);
+    if (authError && !isAuthNotFound(authError)) throw authError;
 
-    res.json({ deleted: true, email: profile?.email || null });
+    await deleteProfileRow(id);
+
+    res.json({ deleted: true, email: authEmail });
   } catch (err) {
     next(err);
   }
@@ -249,46 +492,103 @@ router.delete('/users/:id', requireServiceRole, async (req, res, next) => {
 /** Envoie un lien de réinitialisation de mot de passe. */
 router.post('/users/:id/reset-password', requireServiceRole, async (req, res, next) => {
   try {
-    const { data: profile } = await admin
-      .from('profiles').select('email').eq('id', req.params.id).maybeSingle();
+    let email = null;
+    try {
+      const { data } = await admin.auth.admin.getUserById(req.params.id);
+      email = data?.user?.email || null;
+    } catch {
+      email = null;
+    }
+    if (!email) {
+      const { data: profile } = await admin
+        .from('profiles').select('email').eq('id', req.params.id).maybeSingle();
+      email = profile?.email || null;
+    }
 
-    if (!profile?.email) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+    if (!email) return res.status(404).json({ error: 'Utilisateur introuvable.' });
 
-    const { error } = await admin.auth.resetPasswordForEmail(profile.email, {
+    const { error } = await admin.auth.resetPasswordForEmail(email, {
       redirectTo: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login`,
     });
     if (error) throw error;
 
-    await audit(req, 'ADMIN_PASSWORD_RESET_SENT', { email: profile.email }, 'warning', req.params.id);
-    res.json({ sent: true, email: profile.email });
+    await audit(req, 'ADMIN_PASSWORD_RESET_SENT', { email }, 'warning', req.params.id);
+    res.json({ sent: true, email });
   } catch (err) {
     next(err);
   }
 });
 
-/** Change l'email d'un compte (auth + profil restent synchronisés par trigger). */
+/** Change l'email dans Auth ET dans profiles (le trigger peut manquer). */
 router.patch('/users/:id/email', requireServiceRole, async (req, res, next) => {
   try {
-    const { email } = req.body || {};
+    const { id } = req.params;
+    const email = String(req.body?.email || '').trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Adresse email invalide.' });
     }
 
     const { data: profile } = await admin
-      .from('profiles').select('email').eq('id', req.params.id).maybeSingle();
+      .from('profiles').select('email').eq('id', id).maybeSingle();
 
-    if (await isRootAccount(profile?.email)) {
+    let currentEmail = profile?.email || null;
+    const { data: authLookup } = await admin.auth.admin.getUserById(id);
+    const authUser = authLookup?.user || null;
+    currentEmail = authUser?.email || currentEmail;
+
+    if (!authUser) {
+      return res.status(404).json({
+        error: "Ce compte n'existe plus dans Authentification. Supprimez le profil orphelin.",
+        code: 'AUTH_USER_MISSING',
+      });
+    }
+
+    if (await isRootAccount(currentEmail) || await isRootAccount(profile?.email)) {
       return res.status(403).json({ error: "L'email du super administrateur racine est verrouillé." });
     }
 
-    const { error } = await admin.auth.admin.updateUserById(req.params.id, {
+    const { data: clash } = await admin
+      .from('profiles').select('id, email').ilike('email', email).neq('id', id).maybeSingle();
+    if (clash) {
+      const { data: clashAuth } = await admin.auth.admin.getUserById(clash.id);
+      if (!clashAuth?.user) {
+        return res.status(409).json({
+          error: 'Cette adresse est déjà utilisée par un profil orphelin. Nettoyez les comptes fantômes, puis réessayez.',
+          code: 'ORPHAN_EMAIL_CONFLICT',
+        });
+      }
+      return res.status(409).json({
+        error: 'Cette adresse email est déjà utilisée.',
+        code: 'EMAIL_TAKEN',
+      });
+    }
+
+    const { data: updated, error } = await admin.auth.admin.updateUserById(id, {
       email,
       email_confirm: true,
     });
     if (error) throw error;
 
+    const { data: verify } = await admin.auth.admin.getUserById(id);
+    const applied = (verify?.user?.email || updated?.user?.email || email).toLowerCase();
+    if (applied !== email) {
+      console.warn(`[Admin] Auth a conservé ${applied} au lieu de ${email} (confirmation probablement exigée).`);
+    }
+
+    const { error: profileError } = await admin
+      .from('profiles')
+      .update({ email, is_verified: true })
+      .eq('id', id);
+    if (profileError) {
+      console.warn('[Admin] Email Auth mis à jour, profil non synchronisé :', profileError.message);
+      throw new Error(
+        `L'email Auth a été changé mais le profil n'a pas suivi (${profileError.message}). ` +
+        'Exécutez supabase/migrations/0006_admin_account_sync.sql.'
+      );
+    }
+
     await audit(req, 'ADMIN_USER_EMAIL_CHANGED',
-      { from: profile?.email, to: email }, 'critical', req.params.id);
+      { from: currentEmail, to: email }, 'critical', id);
     res.json({ updated: true, email });
   } catch (err) {
     next(err);
