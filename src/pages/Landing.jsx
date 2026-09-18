@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Scan, BarChart3, Globe2, ShieldCheck, Clock3, Zap, ArrowRight, ChevronDown, Sparkles, FileText, Link2, Search, Fingerprint } from 'lucide-react';
+import useStore from '../store';
 import './Landing.css';
 
 const fadeUp = { hidden: { opacity: 0, y: 30 }, visible: (i) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5 } }) };
@@ -31,6 +32,8 @@ const faqs = [
 ];
 
 export default function Landing() {
+  const appName = useStore((s) => s.setting('app_name', 'VerifyNet'));
+  const tagline = useStore((s) => s.setting('app_tagline', "Vérifiez l'information avant de la partager"));
   const [openFaq, setOpenFaq] = useState(null);
 
   return (
@@ -47,7 +50,7 @@ export default function Landing() {
               Ne partagez plus<br />sans <span className="gradient-text">vérifier.</span>
             </motion.h1>
             <motion.p className="hero-subtitle" variants={fadeUp} custom={2}>
-              Collez un texte ou un lien. VerifyNet analyse, vérifie les sources, et vous dit en 2 secondes si vous pouvez faire confiance — ou pas.
+              {tagline}
             </motion.p>
             <motion.div className="hero-actions" variants={fadeUp} custom={3}>
               <Link to="/analyze" className="btn btn-primary btn-lg">
@@ -57,7 +60,7 @@ export default function Landing() {
               <a href="#features" className="btn btn-ghost btn-lg">Voir comment ça marche</a>
             </motion.div>
             <motion.p className="hero-footnote" variants={fadeUp} custom={4}>
-              Gratuit · Aucune inscription requise
+              Gratuit · Aucune inscription requise · {appName}
             </motion.p>
           </motion.div>
           <motion.div className="hero-visual" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}>

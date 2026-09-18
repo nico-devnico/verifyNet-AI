@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Target, Lock, Accessibility, Zap } from 'lucide-react';
+import useStore from '../store';
 import './About.css';
 
 const values = [
@@ -10,12 +11,15 @@ const values = [
 ];
 
 export default function About() {
+  const name = useStore((s) => s.setting('app_name', 'VerifyNet'));
+  const tagline = useStore((s) => s.setting('app_tagline', 'Combattre la désinformation, une vérification à la fois.'));
+
   return (
     <div className="about-page">
       <div className="container container-sm">
         <motion.div className="page-header" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1>À propos de VerifyNet</h1>
-          <p>Combattre la désinformation, une vérification à la fois.</p>
+          <h1>À propos de {name}</h1>
+          <p>{tagline}</p>
         </motion.div>
 
         <motion.div className="about-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>

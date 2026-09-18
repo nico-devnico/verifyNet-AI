@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { FileText, Search, Brain, Share2, ShieldCheck, FileOutput } from 'lucide-react';
+import { FileText, Search, Brain, ShieldCheck, FileOutput } from 'lucide-react';
 import './AnalysisProgress.css';
 
 const steps = [

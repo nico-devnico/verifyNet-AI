@@ -2,7 +2,15 @@ const Groq = require('groq-sdk');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
-const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+
+const FALLBACK_MODELS = [
+  MODEL,
+  'qwen/qwen3.8-27b',
+  'qwen/qwen3.6-27b',
+  'openai/gpt-oss-20b',
+  'openai/gpt-oss-safeguard-20b',
+].filter((v, i, a) => a.indexOf(v) === i);
 
 const SYSTEM_PROMPT = `Tu es VerifyNet, un expert mondial en fact-checking et détection de fake news. Tu analyses du contenu pour évaluer sa crédibilité.
 
@@ -37,34 +45,43 @@ Sois rigoureux, objectif et factuel. Identifie les techniques de manipulation, l
 async function analyzeContent(content, metadata = {}) {
   const userMessage = buildUserMessage(content, metadata);
 
-  const completion = await groq.chat.completions.create({
-    model: MODEL,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userMessage },
-    ],
-    temperature: 0.2,
-    max_tokens: 2048,
-    top_p: 0.9,
-    response_format: { type: 'json_object' },
-  });
+  let lastError;
+  for (const modelId of FALLBACK_MODELS) {
+    try {
+      console.log(`[ai.js] Trying model: ${modelId}`);
+      const completion = await groq.chat.completions.create({
+        model: modelId,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.2,
+        max_tokens: 2048,
+        top_p: 0.9,
+        response_format: { type: 'json_object' },
+      });
 
-  const responseText = completion.choices[0]?.message?.content;
-  if (!responseText) throw new Error('Aucune réponse de l\'IA');
+      const responseText = completion.choices[0]?.message?.content;
+      if (!responseText) throw new Error('Aucune réponse de l\'IA');
 
-  try {
-    const result = JSON.parse(responseText);
-    // Validate and clamp score
-    result.score = Math.max(0, Math.min(100, Math.round(result.score || 50)));
-    // Ensure arrays exist
-    if (!Array.isArray(result.claims)) result.claims = [];
-    if (!Array.isArray(result.sources)) result.sources = [];
-    if (!Array.isArray(result.recommendations)) result.recommendations = [];
-    if (!result.analysis) result.analysis = {};
-    return result;
-  } catch {
-    throw new Error('Réponse IA invalide, veuillez réessayer.');
+      try {
+        const result = JSON.parse(responseText);
+        result.score = Math.max(0, Math.min(100, Math.round(result.score || 50)));
+        if (!Array.isArray(result.claims)) result.claims = [];
+        if (!Array.isArray(result.sources)) result.sources = [];
+        if (!Array.isArray(result.recommendations)) result.recommendations = [];
+        if (!result.analysis) result.analysis = {};
+        console.log(`[ai.js] Success with ${modelId}`);
+        return result;
+      } catch {
+        throw new Error('Réponse IA invalide, veuillez réessayer.');
+      }
+    } catch (err) {
+      console.warn(`[ai.js] Failed with ${modelId}: ${err.message}`);
+      lastError = err;
+    }
   }
+  throw lastError || new Error('Tous les modèles IA ont échoué.');
 }
 
 function buildUserMessage(content, metadata) {

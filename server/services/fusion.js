@@ -1,16 +1,18 @@
 const Groq = require('groq-sdk');
-const { searchWeb, RELIABLE_SOURCES, fetchPageContent } = require('./webSearch');
+const { searchWeb, fetchPageContent } = require('./webSearch');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
-// List of allowed models in priority order exactly as requested by user!
+// Groq models — EMPIRICALLY TESTED on this API key (2026-09-15)
+// Only qwen/qwen3.8-27b works right now on this specific project key.
+// openai/gpt-oss-* are 403 (blocked at project level — enable in console.groq.com/settings/project/limits)
+// Llama, Gemma, Mixtral, old qwen3.6, qwen3-32b: 404/400 (not available or decommissioned)
 const ALLOWED_MODELS = [
-  'groq/compound',
-  'groq/compound-mini',
-  'llama-3.1-8b-instant',
-  'llama-3.3-70b-versatile',
-  'qwen3-32b',
-  'qwen3.6-27b'
+  'qwen/qwen3.8-27b',
+  'openai/gpt-oss-120b',
+  'qwen/qwen3.6-27b',
+  'openai/gpt-oss-20b',
+  'openai/gpt-oss-safeguard-20b',
 ];
 
 function clamp(v) { 

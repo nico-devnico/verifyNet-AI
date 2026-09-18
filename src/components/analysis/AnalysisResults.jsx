@@ -1,187 +1,170 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FileText, Search, CheckCircle2, RotateCcw, AlertTriangle, Shield, Globe, Share2, ExternalLink, XCircle, HelpCircle, Download } from 'lucide-react';
+import { FileText, Search, CheckCircle2, RotateCcw, AlertTriangle, Shield, Globe, Share2, ExternalLink, XCircle, HelpCircle, Download, Loader2, Info } from 'lucide-react';
 import { getScoreClassification, getScoreColor } from '../../utils/helpers';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { toast } from '../../store/toast';
 import useStore from '../../store';
 import './AnalysisResults.css';
 
 const fadeIn = (delay = 0) => ({ initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay, duration: 0.5 } });
 
-const generatePDF = (data) => {
-  console.log('📄 Début de la génération du PDF...');
-  console.log('Données reçues:', data);
-  
-  try {
-    const doc = new jsPDF();
-    const score = data.finalScore ?? data.final_score ?? data.score ?? 0;
-    const verdict = data.verdict;
-    const claim = data.claim;
-    const mainTopic = data.mainTopic;
-    const analysis = data.analysis || {};
-    const consultedSources = data.consultedSources || data.consulted_sources || [];
-    const recommendations = data.recommendations || [];
-    const detailedConclusion = data.detailedConclusion;
-    const sourceSummary = data.sourceSummary;
-    const reasoning = data.reasoning;
+/* -------------------------------------------------------------------------- */
+/* Export PDF                                                                  */
+/* -------------------------------------------------------------------------- */
 
-    console.log('✅ jsPDF initialisé');
-
-    // En-tête simple
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text('VerifyNet - Rapport d\'analyse', 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 14, 30);
-
-    let yPosition = 40;
-
-    // Section Score
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Résultat', 14, yPosition);
-    yPosition += 8;
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Score: ${score}/100`, 14, yPosition);
-    yPosition += 6;
-    doc.text(`Verdict: ${verdict || 'Analyse terminée'}`, 14, yPosition);
-    yPosition += 10;
-
-    // Affirmation
-    if (claim) {
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Affirmation analysée', 14, yPosition);
-      yPosition += 8;
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      const claimLines = doc.splitTextToSize(claim, 180);
-      doc.text(claimLines, 14, yPosition);
-      yPosition += (claimLines.length * 6) + 8;
-    }
-
-    // Résumé des sources
-    if (sourceSummary) {
-      if (yPosition > 250) { doc.addPage(); yPosition = 20; }
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Résumé des sources', 14, yPosition);
-      yPosition += 8;
-      doc.setFontSize(10);
-      const summaryLines = doc.splitTextToSize(sourceSummary, 180);
-      doc.text(summaryLines, 14, yPosition);
-      yPosition += (summaryLines.length * 6) + 8;
-    }
-
-    // Raisonnement
-    if (reasoning) {
-      if (yPosition > 250) { doc.addPage(); yPosition = 20; }
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Raisonnement de l\'IA', 14, yPosition);
-      yPosition += 8;
-      doc.setFontSize(10);
-      const reasoningLines = doc.splitTextToSize(reasoning, 180);
-      doc.text(reasoningLines, 14, yPosition);
-      yPosition += (reasoningLines.length * 6) + 8;
-    }
-
-    // Conclusion
-    if (detailedConclusion) {
-      if (yPosition > 250) { doc.addPage(); yPosition = 20; }
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Conclusion détaillée', 14, yPosition);
-      yPosition += 8;
-      doc.setFontSize(10);
-      const conclusionLines = doc.splitTextToSize(detailedConclusion, 180);
-      doc.text(conclusionLines, 14, yPosition);
-      yPosition += (conclusionLines.length * 6) + 8;
-    }
-
-    // Sources
-    if (consultedSources.length > 0) {
-      if (yPosition > 150) { doc.addPage(); yPosition = 20; }
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Sources consultées', 14, yPosition);
-      yPosition += 12;
-      
-      // Afficher les sources avec liens cliquables
-      consultedSources.slice(0, 10).forEach((source, index) => {
-        if (yPosition > 270) {
-          doc.addPage();
-          yPosition = 20;
-        }
-        
-        // Titre de la source
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        // doc.setTextColor(20, 184, 166); // Couleur primaire
-        
-        const titleText = source.title?.substring(0, 80) || 'Sans titre';
-        doc.text(titleText, 14, yPosition);
-        
-        // Ajouter le lien cliquable
-        if (source.url) {
-          try {
-            doc.link(14, yPosition - 6, 180, 8, { url: source.url });
-          } catch (e) {
-            console.log('Could not add link to PDF:', e);
-          }
-        }
-        
-        yPosition += 7;
-        
-        // Domaine et fiabilité
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        // doc.setTextColor(100, 100, 100);
-        
-        const metaText = `${source.domain || 'N/A'} - ${source.reliabilityLabel || 'Fiabilité inconnue'}`;
-        doc.text(metaText, 14, yPosition);
-        yPosition += 6;
-        
-        // URL complète
-        if (source.url) {
-          doc.setFontSize(8);
-          // doc.setTextColor(60, 120, 216); // Bleu pour les liens
-          const urlText = source.url.length > 80 ? source.url.substring(0, 80) + '...' : source.url;
-          doc.text(urlText, 14, yPosition);
-          yPosition += 10;
-        } else {
-          yPosition += 4;
-        }
-      });
-      
-      // Si plus de sources, mentionner
-      if (consultedSources.length > 10) {
-        if (yPosition > 275) { doc.addPage(); yPosition = 20; }
-        doc.setFontSize(9);
-        // doc.setTextColor(100, 100, 100);
-        doc.text(`... et ${consultedSources.length - 10} autres sources consultées (voir la page web pour la liste complète)`, 14, yPosition);
-      }
-    }
-
-    console.log('✅ PDF généré avec succès, téléchargement en cours...');
-    doc.save(`rapport-verifynet-${Date.now()}.pdf`);
-    console.log('✅ PDF téléchargé !');
-
-  } catch (error) {
-    console.error('❌ Erreur lors de la génération du PDF:', error);
-    alert(`Erreur lors de la génération du PDF: ${error.message}`);
-  }
+const PDF = {
+  margin: 14,
+  width: 182,          // A4 (210 mm) moins les deux marges
+  bottom: 275,         // au-delà, on passe à la page suivante
+  top: 20,
 };
 
-export default function AnalysisResults({ data, onReset }) {
-  const [pdfError, setPdfError] = useState('');
+/**
+ * Rédige le rapport dans un PDF et le télécharge.
+ *
+ * jspdf pèse près de 400 Ko : on ne le charge qu'au clic, pour ne pas
+ * l'imposer aux utilisateurs qui consultent le résultat à l'écran.
+ */
+async function generatePDF(data) {
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF();
+
+  const score = data.finalScore ?? data.final_score ?? data.score ?? 0;
+  const consultedSources = data.consultedSources || data.consulted_sources || [];
+
+  let y = PDF.top;
+
+  /* Réserve `needed` millimètres, en ouvrant une page si nécessaire. */
+  const reserve = (needed) => {
+    if (y + needed > PDF.bottom) {
+      doc.addPage();
+      y = PDF.top;
+    }
+  };
+
+  const heading = (label) => {
+    reserve(16);
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text(label, PDF.margin, y);
+    y += 7;
+  };
+
+  /* Écrit un paragraphe en le coupant page par page si besoin. */
+  const paragraph = (text, { size = 10, lineHeight = 5 } = {}) => {
+    doc.setFontSize(size);
+    doc.setFont('helvetica', 'normal');
+    for (const line of doc.splitTextToSize(String(text), PDF.width)) {
+      reserve(lineHeight);
+      doc.text(line, PDF.margin, y);
+      y += lineHeight;
+    }
+    y += 5;
+  };
+
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('VerifyNet — Rapport d\'analyse', PDF.margin, y);
+  y += 8;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(
+    `Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`,
+    PDF.margin, y
+  );
+  y += 12;
+
+  heading('Résultat');
+  paragraph(
+    `Score de fiabilité : ${score}/100\nVerdict : ${data.verdict || 'Analyse terminée'}`,
+    { size: 11, lineHeight: 6 }
+  );
+
+  if (data.claim) {
+    heading('Affirmation analysée');
+    paragraph(data.claim);
+  }
+  if (data.sourceSummary) {
+    heading('Résumé des sources');
+    paragraph(data.sourceSummary);
+  }
+  if (data.reasoning) {
+    heading('Raisonnement de l\'IA');
+    paragraph(data.reasoning);
+  }
+  if (data.detailedConclusion) {
+    heading('Conclusion détaillée');
+    paragraph(data.detailedConclusion);
+  }
+
+  if (consultedSources.length > 0) {
+    heading(`Sources consultées (${consultedSources.length})`);
+
+    consultedSources.slice(0, 25).forEach((source, index) => {
+      reserve(18);
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      const title = source.title || source.domain || 'Sans titre';
+      const titleLines = doc.splitTextToSize(`${index + 1}. ${title}`, PDF.width);
+      doc.text(titleLines, PDF.margin, y);
+
+      // La zone cliquable couvre le titre entier, pas seulement sa première ligne.
+      if (source.url) {
+        doc.link(PDF.margin, y - 4, PDF.width, titleLines.length * 5, { url: source.url });
+      }
+      y += titleLines.length * 5;
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(
+        `${source.domain || 'domaine inconnu'} — ${source.reliabilityLabel || 'fiabilité inconnue'}`,
+        PDF.margin, y
+      );
+      y += 4;
+
+      if (source.url) {
+        const url = source.url.length > 110 ? `${source.url.slice(0, 110)}…` : source.url;
+        doc.text(url, PDF.margin, y);
+        y += 4;
+      }
+      y += 3;
+    });
+
+    if (consultedSources.length > 25) {
+      reserve(8);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'italic');
+      doc.text(
+        `… et ${consultedSources.length - 25} autres sources, consultables dans l'application.`,
+        PDF.margin, y
+      );
+    }
+  }
+
+  // Pagination : ajoutée en dernier, quand le nombre total est enfin connu.
+  const pageCount = doc.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${page} / ${pageCount}`, 196, 289, { align: 'right' });
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  doc.save(`rapport-verifynet-${stamp}.pdf`);
+}
+
+/*
+ * `showSignupHint` : la page de rapport partagé porte déjà son propre appel à
+ * l'inscription, et le texte « conservée dans ce navigateur » y serait faux.
+ */
+export default function AnalysisResults({ data, onReset, showSignupHint = true }) {
+  const [pdfBusy, setPdfBusy] = useState(false);
   const score = data.finalScore ?? data.final_score ?? data.score ?? 0;
   const verdict = data.verdict;
-  const summary = data.summary;
   const claim = data.claim;
   const mainTopic = data.mainTopic;
   const country = data.country;
@@ -203,18 +186,15 @@ export default function AnalysisResults({ data, onReset }) {
 
   const { user } = useStore(); // Add this to get the user from store
 
-  const handleDownloadPDF = () => {
-    if (!user) {
-      setPdfError('Veuillez vous connecter pour télécharger le PDF.');
-      return;
-    }
-    
-    setPdfError('');
+  const handleDownloadPDF = async () => {
+    setPdfBusy(true);
     try {
-      generatePDF(data);
+      await generatePDF(data);
+      toast.success('Rapport PDF téléchargé.');
     } catch (error) {
-      console.error('❌ Erreur lors du téléchargement:', error);
-      setPdfError(`Erreur: ${error.message}`);
+      toast.error(`Le PDF n'a pas pu être généré : ${error.message}`);
+    } finally {
+      setPdfBusy(false);
     }
   };
 
@@ -474,28 +454,28 @@ export default function AnalysisResults({ data, onReset }) {
 
       {/* Actions */}
       <motion.div className="result-actions" {...fadeIn(0.55)}>
-        {pdfError && (
-          <div className="error-message" style={{ color: 'red', marginBottom: '16px', padding: '12px', borderRadius: '8px', background: 'rgba(255,0,0,0.1)' }}>
-            {pdfError}
-          </div>
-        )}
-        {user && (
-          <button className="btn btn-secondary btn-lg" onClick={handleDownloadPDF}><Download size={18} /> Télécharger le rapport PDF</button>
-        )}
-        {!user && (
-          <div style={{ 
-            color: 'var(--text-secondary)', 
-            padding: '12px 16px', 
-            borderRadius: '8px', 
-            background: 'var(--surface)', 
-            border: '1px solid var(--border)',
-            fontSize: '0.9375rem'
-          }}>
-            ⚠️ Veuillez vous connecter pour télécharger le rapport PDF.
-          </div>
-        )}
+        <button
+          className="btn btn-secondary btn-lg"
+          onClick={handleDownloadPDF}
+          disabled={pdfBusy}
+        >
+          {pdfBusy
+            ? <><Loader2 size={18} className="spinner" /> Préparation du PDF…</>
+            : <><Download size={18} /> Télécharger le rapport PDF</>}
+        </button>
         <button className="btn btn-primary btn-lg" onClick={onReset}><RotateCcw size={18} /> Nouvelle analyse</button>
       </motion.div>
+
+      {!user && showSignupHint && (
+        <motion.p className="result-signup-hint" {...fadeIn(0.6)}>
+          <Info size={15} />
+          <span>
+            Cette analyse n'est conservée que dans ce navigateur.{' '}
+            <Link to="/signup">Créez un compte</Link> pour l'archiver, la
+            retrouver depuis n'importe quel appareil et la partager par lien.
+          </span>
+        </motion.p>
+      )}
     </motion.div>
   );
 }

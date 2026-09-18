@@ -1,0 +1,87 @@
+.status-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 32px 20px;
+  background:
+    radial-gradient(900px 420px at 50% -10%, var(--primary-soft), transparent 70%),
+    var(--bg);
+}
+
+.status-screen.tone-warning {
+  background:
+    radial-gradient(900px 420px at 50% -10%, var(--warning-soft), transparent 70%),
+    var(--bg);
+}
+.status-screen.tone-danger {
+  background:
+    radial-gradient(900px 420px at 50% -10%, var(--danger-soft), transparent 70%),
+    var(--bg);
+}
+
+.status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 520px;
+  padding: 40px 34px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.status-icon {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+}
+.tone-warning .status-icon { background: var(--warning-soft); color: var(--warning); }
+.tone-danger  .status-icon { background: var(--danger-soft);  color: var(--danger); }
+
+.status-card h1 { font-size: 1.625rem; }
+.status-card p { color: var(--text-secondary); font-size: 1rem; }
+
+.status-note {
+  font-size: .875rem !important;
+  color: var(--text-muted) !important;
+  max-width: 42ch;
+}
+
+.status-reason {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 13px 16px;
+  text-align: left;
+  background: var(--danger-soft);
+  border-radius: var(--radius);
+}
+.status-reason strong {
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--danger);
+}
+.status-reason span { font-size: .9375rem; overflow-wrap: anywhere; }
+
+.status-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+@media (max-width: 560px) {
+  .status-card { padding: 30px 22px; }
+  .status-actions { width: 100%; flex-direction: column; }
+  .status-actions > * { width: 100%; }
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, LogIn, Loader2, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import useStore from '../store';
 import { formatAuthError, logAuthAction } from '../utils/authErrors';
@@ -13,18 +13,56 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [notice, setNotice] = useState('');
   const location = useLocation();
-  const { user } = useStore();
+  const { user, profile, profileError, settingBool, setting, isAdmin, isSuperAdmin } = useStore();
 
-  // Get the redirect path from location state or default to /dashboard
-  const from = location.state?.from?.pathname || '/dashboard';
+  const from = location.state?.from?.pathname;
 
-  // Redirect if already logged in
   if (user) {
-    navigate(from, { replace: true });
-    return null;
+    if (!profile && !profileError) {
+      return (
+        <div className="auth-page">
+          <div className="auth-container">
+            <div className="auth-card auth-card-centered">
+              <Loader2 size={28} className="spinner" />
+              <p>Ouverture de la session…</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const fallback = isSuperAdmin()
+      ? '/super-admin'
+      : isAdmin()
+        ? '/admin'
+        : '/dashboard';
+    const dest = from && from !== '/login' ? from : fallback;
+    return <Navigate to={dest} replace />;
   }
+
+  /** Envoie un lien de réinitialisation à l'adresse déjà saisie. */
+  const handleReset = async () => {
+    if (!email.trim()) {
+      setError('Saisissez votre adresse email pour recevoir un lien de réinitialisation.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setNotice('');
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/settings`,
+      });
+      if (resetError) throw resetError;
+      setNotice(`Un lien de réinitialisation a été envoyé à ${email.trim()}.`);
+    } catch (err) {
+      setError(formatAuthError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
@@ -53,7 +91,9 @@ export default function Login() {
       }
 
       logAuthAction('Connexion réussie', { userId: data.user?.id });
-      navigate(from, { replace: true });
+      /* La redirection est faite au rendu, une fois le profil chargé : un
+         administrateur doit aboutir sur sa console, pas sur un tableau de
+         bord masqué par l'écran de maintenance. */
     } catch (err) {
       logAuthAction('Erreur connexion email', { error: err.message });
       setError(formatAuthError(err));
@@ -64,13 +104,13 @@ export default function Login() {
 
   const handleGoogleLogin = async () => {
     logAuthAction('Tentative de connexion Google');
-    const redirectUrl = `${window.location.origin}${from}`;
+    const redirectUrl = `${window.location.origin}/login`;
     setLoading(true);
     setError('');
 
     try {
       logAuthAction('Appel API signInWithOAuth (Google)', { redirectUrl });
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
@@ -98,11 +138,20 @@ export default function Login() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="auth-card">
           <div className="auth-header">
-          <h1>Connexion</h1>
-          <p>Accédez à votre compte VerifyNet</p>
+            <h1>Connexion</h1>
+            <p>
+              {settingBool('maintenance_mode', false)
+                ? 'La plateforme est en maintenance. Connectez-vous avec un compte administrateur pour y accéder.'
+                : `Accédez à votre compte ${setting('app_name', 'VerifyNet')}`}
+            </p>
           </div>
 
-          {error && <div className="auth-error">{error}</div>}
+          {error && <div className="auth-error" role="alert">{error}</div>}
+          {notice && (
+            <div className="auth-notice" role="status">
+              <CheckCircle2 size={16} /> {notice}
+            </div>
+          )}
 
           <form onSubmit={handleEmailLogin} className="auth-form">
             <div className="auth-input-group">
@@ -137,12 +186,21 @@ export default function Login() {
             </div>
 
             <button
+              type="button"
+              className="auth-link auth-forgot"
+              onClick={handleReset}
+              disabled={loading}
+            >
+              Mot de passe oublié ?
+            </button>
+
+            <button
               type="submit"
               className="btn btn-primary w-full"
               disabled={loading}
             >
-              <LogIn size={18} />
-              {loading ? 'Connexion en cours...' : 'Se connecter'}
+              {loading ? <Loader2 size={18} className="spinner" /> : <LogIn size={18} />}
+              {loading ? 'Connexion en cours…' : 'Se connecter'}
             </button>
           </form>
 
@@ -166,8 +224,16 @@ export default function Login() {
           </button>
 
           <div className="auth-footer">
-            <p>Pas de compte ?</p>
-            <Link to="/signup" className="auth-link">Créer un compte</Link>
+            {settingBool('maintenance_mode', false) ? (
+              <p>Accès réservé aux administrateurs pendant la maintenance.</p>
+            ) : settingBool('enable_registrations', true) ? (
+              <>
+                <p>Pas de compte ?</p>
+                <Link to="/signup" className="auth-link">Créer un compte</Link>
+              </>
+            ) : (
+              <p>Les inscriptions sont momentanément fermées.</p>
+            )}
           </div>
         </motion.div>
       </div>

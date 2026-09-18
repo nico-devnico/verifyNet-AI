@@ -2,7 +2,7 @@ const cheerio = require('cheerio');
 const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 
-const BLOCKED_DOMAINS = ['facebook.com/login', 'twitter.com/i/flow/login'];
+const BLOCKED_DOMAINS = ['facebook.com/login', 'x.com/i/flow/login'];
 
 function isValidUrl(str) {
   try {
@@ -16,6 +16,23 @@ function sanitizeText(text) {
   return text
     .replace(/\s+/g, ' ')
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    .trim();
+}
+
+/**
+ * Variante qui conserve les sauts de ligne.
+ * Pour un texte issu d'un OCR ou d'un PDF, la mise en page (paragraphes,
+ * listes, titres) porte du sens : l'écraser en une seule ligne dégrade la
+ * qualité de l'analyse.
+ */
+function sanitizeMultiline(text) {
+  if (!text) return '';
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -99,9 +116,11 @@ async function scrapeUrl(url) {
     };
   } catch (err) {
     clearTimeout(timeout);
-    if (err.name === 'AbortError') throw new Error('Le délai d\'attente a été dépassé.');
+    if (err.name === 'AbortError') {
+      throw new Error('Le délai d\'attente a été dépassé.', { cause: err });
+    }
     throw err;
   }
 }
 
-module.exports = { scrapeUrl, isValidUrl, sanitizeText };
+module.exports = { scrapeUrl, isValidUrl, sanitizeText, sanitizeMultiline };

@@ -1,0 +1,104 @@
+/* Progression de l'extraction */
+.extraction-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.extraction-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+}
+
+.extraction-progress-head > svg { color: var(--primary); flex-shrink: 0; }
+
+.extraction-progress-head > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.extraction-progress-head strong { font-size: .9375rem; font-weight: 650; }
+.extraction-progress-head span { font-size: .875rem; color: var(--text-secondary); }
+
+.extraction-percent {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.extraction-note {
+  font-size: .8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* Texte extrait */
+.extracted {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.extracted-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.extracted-head-title { display: flex; align-items: center; gap: 11px; }
+
+.extracted-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+}
+
+.extracted-head-title > div { display: flex; flex-direction: column; }
+.extracted-head-title strong { font-size: .9375rem; font-weight: 650; }
+.extracted-head-title span { font-size: .8125rem; color: var(--text-muted); }
+
+.extracted-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+.extracted-badges { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+.extracted-warnings { flex-direction: row; }
+.extracted-warnings p { font-size: .875rem; line-height: 1.55; }
+.extracted-warnings p + p { margin-top: 5px; }
+
+.extracted-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.extracted-textarea {
+  font-size: .9375rem;
+  line-height: 1.7;
+  min-height: 220px;
+  background: var(--surface-2);
+}
+
+.extracted-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}

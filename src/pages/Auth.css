@@ -45,12 +45,34 @@
   font-size: 0.875rem;
 }
 
+.auth-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--success-soft);
+  color: var(--success);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
   margin-bottom: 24px;
 }
+
+.auth-forgot {
+  align-self: flex-end;
+  margin-top: -8px;
+  font-size: 0.8125rem;
+  background: none;
+  border: none;
+}
+.auth-forgot:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .auth-input-group {
   position: relative;
@@ -97,6 +119,68 @@
 
 .auth-toggle:hover {
   color: var(--text);
+}
+
+/* Prénom + nom sur une seule ligne */
+.auth-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.auth-row .auth-input-group:last-child input { padding-left: 14px; }
+
+/* Indicateur de force du mot de passe */
+.auth-strength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: -6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.auth-strength-bars { display: flex; gap: 4px; flex: 1; }
+.auth-strength-bars span {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: var(--radius-full);
+  transition: background var(--transition);
+}
+.auth-strength.tone-danger  { color: var(--danger); }
+.auth-strength.tone-warning { color: var(--warning); }
+.auth-strength.tone-success { color: var(--success); }
+.auth-strength-bars span.is-filled { background: currentColor; }
+
+/* Écrans d'état : inscriptions fermées, email de confirmation envoyé */
+.auth-card-centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.auth-card-centered h1 { font-size: 1.5rem; }
+
+.auth-status-icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.auth-status-icon.is-success { background: var(--success-soft); color: var(--success); }
+
+.auth-status-text { color: var(--text-secondary); font-size: 0.9375rem; }
+
+.auth-status-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+  width: 100%;
 }
 
 .auth-divider {
@@ -154,4 +238,8 @@
   .auth-header h1 {
     font-size: 1.75rem;
   }
+
+  .auth-row { grid-template-columns: 1fr; }
+  .auth-status-actions { flex-direction: column; }
+  .auth-status-actions > * { width: 100%; }
 }

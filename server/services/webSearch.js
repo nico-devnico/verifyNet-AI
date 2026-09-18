@@ -287,7 +287,7 @@ async function searchWeb(claim, mainTopic, country) {
     allSources: finalUniqueResults.slice(0, 50),
     circulatingOn: [
       { site: 'facebook.com', type: 'social' },
-      { site: 'twitter.com', type: 'social' },
+      { site: 'x.com', type: 'social' },
     ],
     firstAppearance: 'Date inconnue (nécessite analyse temporelle approfondie)',
   };

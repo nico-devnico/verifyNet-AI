@@ -1,10 +1,31 @@
 .settings-page{padding:48px 0 80px}
-.container-sm{max-width:640px}
-.settings-group{display:flex;flex-direction:column;gap:12px}
+.settings-page .container-sm{max-width:660px}
+.settings-group{display:flex;flex-direction:column;gap:14px}
 .settings-card{padding:20px 24px}
 .setting-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.setting-row h3{font-size:1rem;font-weight:600;margin-bottom:2px}
+.setting-row h3{display:flex;align-items:center;gap:8px;font-size:1rem;font-weight:600;margin-bottom:2px}
 .setting-row p{font-size:.875rem;color:var(--text-secondary)}
+
+/* Carte d'identité du compte */
+.settings-identity{display:flex;align-items:center;gap:16px}
+.settings-identity > div{min-width:0}
+.settings-identity strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.settings-avatar{
+  display:grid;place-items:center;
+  width:52px;height:52px;flex-shrink:0;
+  border-radius:50%;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  color:#fff;font-size:1.375rem;font-weight:800;
+}
+
+.settings-hint{font-size:.875rem;color:var(--text-secondary);line-height:1.6}
+.settings-quota-row{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:12px;margin-bottom:10px;font-size:.9375rem;
+}
+
+.settings-danger{border-color:rgba(220,38,38,.24)}
+.settings-danger .settings-section-title{color:var(--danger)}
 
 .toggle-switch{width:48px;height:28px;background:var(--border);border-radius:14px;position:relative;cursor:pointer;transition:var(--transition);flex-shrink:0}
 .toggle-switch.active{background:var(--primary)}

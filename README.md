@@ -101,14 +101,21 @@ cd server
 ```bash
 npm install
 ```
-3. Créer votre fichier `.env` dans `server/` :
+3. Créer votre fichier `.env` dans `server/` (modèle : `server/.env.example`) :
 ```env
 # Groq API (obligatoire)
 GROQ_API_KEY=VOTRE_CLE_GROQ
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 
 # SerpAPI (obligatoire pour vraies recherches)
 SERPAPI_KEY=VOTRE_CLE_SERPAPI
+
+# Supabase — la clé service_role ne doit JAMAIS apparaître côté frontend.
+# Sans elle, la console super admin fonctionne mais ne peut pas créer,
+# supprimer ni réinitialiser un compte dans auth.users.
+SUPABASE_URL=https://VOTRE_PROJET.supabase.co
+SUPABASE_ANON_KEY=VOTRE_CLE_ANON
+SUPABASE_SERVICE_ROLE_KEY=VOTRE_CLE_SERVICE_ROLE
 
 # Configuration serveur
 PORT=3001
@@ -126,14 +133,77 @@ node index.js
 cd ..
 npm install
 ```
-2. Démarrer le serveur frontend
+2. Créer `.env` à la racine (modèle : `.env.example`)
+```env
+VITE_SUPABASE_URL=https://VOTRE_PROJET.supabase.co
+VITE_SUPABASE_ANON_KEY=VOTRE_CLE_ANON
+VITE_API_URL=http://localhost:3001/api
+```
+3. Démarrer le serveur frontend
 ```bash
 npm run dev
 ```
 
+### Étape 4 : Base de données Supabase
+
+Ouvrir le **SQL Editor** du projet Supabase et exécuter les migrations
+**dans cet ordre** :
+
+| Fichier | Rôle |
+|---|---|
+| `supabase/migrations/0001_core_schema.sql` | Tables, colonnes, triggers et politiques RLS |
+| `supabase/migrations/0002_admin_rpc.sql` | Fonctions d'administration, quotas, partage public |
+| `supabase/migrations/0003_audit_hardening.sql` | Scelle la piste d'audit |
+| `supabase/migrations/0004_visitor_visibility.sql` | Enregistre l'activité des visiteurs sans compte |
+
+Les scripts sont idempotents : les rejouer ne détruit aucune donnée et
+n'écrase pas un réglage déjà personnalisé.
+
+Puis vérifier l'installation. Le premier script contrôle les clés, le second la
+base. Aucun des deux n'affiche de secret en clair :
+
+```bash
+# Forme des clés, sans aucun appel réseau
+npm run verify:keys -- --offline
+
+# Interroge Groq, SerpAPI et Supabase : clé valide ? modèle accessible ?
+# quota restant ? la clé service_role est-elle bien privilégiée ?
+npm run verify:keys
+
+# Crée un compte jetable, s'y connecte, écrit une analyse, tente une escalade
+# de privilèges — qui doit échouer — puis nettoie derrière lui
+npm run verify:supabase
+```
+
+Le mode `--offline` attrape déjà les deux erreurs les plus courantes : une clé
+tronquée au copier-coller, et la clé `anon` collée à la place de la
+`service_role` — confusion qui ne se manifeste sinon qu'à la première action
+d'administration.
+
+Enfin, créer le premier super administrateur. L'interface ne peut pas s'en
+charger — il faut déjà être super admin pour y accéder — d'où ce script, à
+lancer une seule fois. Le mot de passe est saisi de façon masquée et n'est
+jamais écrit sur le disque :
+
+```bash
+npm run create:super-admin -- --email vous@exemple.com
+```
+
+Ce compte devient intouchable depuis l'interface : il ne peut être ni
+rétrogradé, ni suspendu, ni supprimé par un autre administrateur, pas même par
+un second super admin. Relancer le script sur une adresse existante répare
+simplement le rôle et la désignation, sans rien recréer.
+
 ### Où obtenir les clés API ?
 - **Groq** : https://console.groq.com/ (gratuite avec limites)
 - **SerpAPI** : https://serpapi.com/ (offre gratuite disponible)
+- **Supabase** : Project Settings → API (`anon` pour le frontend, `service_role`
+  pour le serveur uniquement)
+
+> Les fichiers SQL et notes de la première version sont conservés dans
+> `supabase/legacy/` à titre d'historique. Ils sont remplacés par les
+> migrations ci-dessus et ne doivent plus être exécutés — en particulier
+> `NO_RLS_FIX.sql`, qui désactivait la sécurité au niveau des lignes.
 
 ---
 

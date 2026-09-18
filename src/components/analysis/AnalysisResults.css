@@ -432,9 +432,30 @@
   flex-wrap: wrap;
 }
 
-.result-actions {
-  text-align: center;
-  padding: 24px 0;
+.result-signup-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 620px;
+  margin: 0 auto 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.result-signup-hint svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--primary);
+}
+
+.result-signup-hint a {
+  color: var(--primary);
+  font-weight: 600;
 }
 
 /* Tablet Styles */

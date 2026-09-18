@@ -1,0 +1,80 @@
+.shared-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 36px;
+  padding-bottom: 72px;
+}
+
+.shared-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 96px 20px;
+  color: var(--text-muted);
+}
+
+.shared-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  flex-wrap: wrap;
+  background:
+    radial-gradient(700px 220px at 0% -60%, var(--primary-soft), transparent 70%),
+    var(--surface);
+}
+
+.shared-header-main { flex: 1; min-width: 260px; }
+.shared-header-main h1 { margin: 12px 0 8px; font-size: clamp(1.5rem, 3vw, 2rem); }
+.shared-header-main p { color: var(--text-secondary); max-width: 58ch; }
+
+.shared-meta {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  font-size: .8125rem;
+  color: var(--text-muted);
+}
+.shared-meta span { display: inline-flex; align-items: center; gap: 6px; }
+
+.shared-header-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 152px;
+}
+
+.shared-score {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 14px 24px;
+  border-radius: var(--radius-lg);
+}
+.shared-score strong { font-size: 2.5rem; font-weight: 800; letter-spacing: -.04em; }
+.shared-score span { font-size: .9375rem; font-weight: 600; opacity: .75; }
+
+.shared-verdict { font-size: .9375rem; font-weight: 650; text-align: center; }
+
+.shared-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  flex-wrap: wrap;
+  background:
+    radial-gradient(600px 200px at 100% 140%, var(--accent-soft), transparent 70%),
+    var(--surface);
+}
+.shared-cta h2 { font-size: 1.25rem; margin-bottom: 5px; }
+.shared-cta p { color: var(--text-secondary); font-size: .9375rem; }
+
+@media (max-width: 640px) {
+  .shared-header, .shared-cta { flex-direction: column; align-items: flex-start; }
+  .shared-header-side { align-items: flex-start; width: 100%; }
+  .shared-cta .btn { width: 100%; }
+}
