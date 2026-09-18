@@ -6,6 +6,7 @@ const { scrapeUrl, sanitizeText, sanitizeMultiline } = require('../services/scra
 const { maintenanceGate, featureGate, quotaGate } = require('../middleware/gate');
 const settings = require('../services/settings');
 const anonymousAnalyses = require('../services/anonymousAnalyses');
+const visitors = require('../services/visitors');
 
 const MIN_CONTENT_LENGTH = 20;
 
@@ -69,9 +70,15 @@ async function handleAnalysisSSE(req, res, getContent) {
      * L'écriture est attendue avant la fin du flux pour que le comptage du
      * quota suivant soit juste, mais elle ne peut pas faire échouer la réponse.
      */
-    if (!req.auth && req.visitor) {
+    if (!req.auth) {
+      /*
+       * quotaGate pose déjà l'empreinte, mais un incident en amont (réglage
+       * illisible, repli) peut laisser passer la requête sans `req.visitor`.
+       * On recalcule ici pour que l'analyse apparaisse toujours au super admin.
+       */
+      const visitor = req.visitor || visitors.identify(req);
       await anonymousAnalyses.record({
-        visitor: req.visitor,
+        visitor,
         type: metadata.sourceKind || 'text',
         content: trimmed,
         result,

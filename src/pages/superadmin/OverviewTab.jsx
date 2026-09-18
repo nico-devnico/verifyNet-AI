@@ -114,7 +114,7 @@ export default function OverviewTab() {
       label: 'Analyses de visiteurs', value: v.analyses_total ?? '—', Icon: Globe, tone: 'gold',
       detail: visitors
         ? `${v.analyses_today || 0} aujourd’hui · ${v.visitors_today || 0} visiteur${(v.visitors_today || 0) !== 1 ? 's' : ''} distinct${(v.visitors_today || 0) !== 1 ? 's' : ''}`
-        : 'Migration 0004 requise',
+        : 'Migration 0004/0005 requise',
     },
     {
       label: 'Actions journalisées', value: stats.logs.total, Icon: Activity, tone: 'success',
@@ -204,7 +204,7 @@ export default function OverviewTab() {
             <strong>Activité des visiteurs invisible</strong>
             <p>
               {/does not exist|could not find|Fonction absente/i.test(visitorError)
-                ? 'Exécutez supabase/migrations/0004_visitor_visibility.sql dans le SQL Editor de Supabase. Sans cette migration, les analyses sans compte n’apparaissent pas ici.'
+                ? 'Exécutez supabase/migrations/0004_visitor_visibility.sql puis 0005_admin_visibility_fixes.sql dans le SQL Editor de Supabase. Sans ces migrations, les analyses sans compte n’apparaissent pas ici.'
                 : visitorError}
             </p>
           </div>

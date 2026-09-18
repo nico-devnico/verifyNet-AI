@@ -86,10 +86,21 @@ router.get('/diagnostics', async (req, res) => {
       const missing = error && /does not exist|could not find/i.test(error.message);
       push('Visibilité des visiteurs', !missing,
         missing
-          ? 'Introuvable — exécutez 0004_visitor_visibility.sql'
+          ? 'Introuvable — exécutez 0004_visitor_visibility.sql puis 0005_admin_visibility_fixes.sql'
           : 'Analyses anonymes visibles dans la console');
     } catch (err) {
       push('Visibilité des visiteurs', false, err.message);
+    }
+
+    try {
+      const { error } = await client.rpc('admin_list_activity_logs', { p_limit: 1, p_offset: 0 });
+      const missing = error && /does not exist|could not find/i.test(error.message);
+      push('Journal d\'audit', !missing,
+        missing
+          ? 'Introuvable — exécutez 0005_admin_visibility_fixes.sql'
+          : 'Lecture via RPC, indépendante de la relation PostgREST');
+    } catch (err) {
+      push('Journal d\'audit', false, err.message);
     }
 
     try {

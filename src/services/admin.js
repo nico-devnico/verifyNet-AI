@@ -31,7 +31,7 @@ function toFriendlyError(error) {
   if (/could not find the function|does not exist/i.test(raw)) {
     return new Error(
       'Fonction absente en base. Exécutez les migrations supabase/migrations/ ' +
-      '(0001 à 0004) dans le SQL Editor de Supabase, dans cet ordre.'
+      '(0001 à 0005) dans le SQL Editor de Supabase, dans cet ordre.'
     );
   }
   // Les messages de nos fonctions sont préfixés CODE: message
@@ -100,15 +100,39 @@ export const revokeSessions = (userId) =>
 export async function listAnalyses({
   search = '', type = '', status = '', audience = '', limit = 50, offset = 0,
 } = {}) {
-  const rows = await rpc('admin_list_analyses', {
+  const params = {
     p_search: search || null,
     p_type: type || null,
     p_status: status || null,
     p_limit: limit,
     p_offset: offset,
     p_audience: audience || null,
-  });
-  return { items: rows || [], total: rows?.[0]?.total_count ?? 0 };
+  };
+
+  try {
+    const rows = await rpc('admin_list_analyses', params);
+    return { items: rows || [], total: rows?.[0]?.total_count ?? 0 };
+  } catch (err) {
+    /*
+     * Signature 0002 sans p_audience : on retombe dessus et on filtre
+     * membres/visiteurs en mémoire, le temps que 0005 soit appliquée.
+     */
+    if (!/Fonction absente|could not find the function|does not exist/i.test(err.message || '')) {
+      throw err;
+    }
+    const { data, error } = await supabase.rpc('admin_list_analyses', {
+      p_search: params.p_search,
+      p_type: params.p_type,
+      p_status: params.p_status,
+      p_limit: params.p_limit,
+      p_offset: params.p_offset,
+    });
+    if (error) throw toFriendlyError(error);
+    let items = data || [];
+    if (audience === 'visitors') items = items.filter((row) => !row.user_id);
+    if (audience === 'members') items = items.filter((row) => row.user_id);
+    return { items, total: items[0]?.total_count ?? items.length };
+  }
 }
 
 export const moderateAnalysis = (analysisId, remove, reason = null) =>
@@ -164,26 +188,66 @@ export async function updateSetting(key, value) {
 /* Journaux, statistiques, diffusion                                           */
 /* -------------------------------------------------------------------------- */
 
+function asAuditRow(row) {
+  if (!row) return row;
+  const actor = row.actor && typeof row.actor === 'object' && !Array.isArray(row.actor)
+    ? row.actor
+    : (row.actor_email ? { email: row.actor_email, role: row.actor_role || null } : null);
+  return { ...row, actor };
+}
+
 export async function listActivityLogs({
   search = '', severity = '', audience = '', limit = 100, offset = 0,
 } = {}) {
+  /*
+   * Le embed PostgREST `profiles!activity_logs_user_id_fkey` échoue dès que
+   * la clé étrangère manque (schéma d'origine sans FK). On passe donc par
+   * une RPC qui fait le LEFT JOIN en SQL. Repli : lecture simple + hydratation.
+   */
+  try {
+    const rows = await rpc('admin_list_activity_logs', {
+      p_search: search || null,
+      p_severity: severity || null,
+      p_audience: audience || null,
+      p_limit: limit,
+      p_offset: offset,
+    });
+    const items = (rows || []).map(asAuditRow);
+    return { items, total: items[0]?.total_count ?? items.length };
+  } catch (err) {
+    const missingRpc = /Fonction absente|could not find the function|does not exist/i.test(err.message || '');
+    if (!missingRpc) throw err;
+  }
+
   let query = supabase
     .from('activity_logs')
-    .select('*, actor:profiles!activity_logs_user_id_fkey(email, role)', { count: 'exact' })
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (search.trim()) {
-    const term = `%${search.trim()}%`;
-    query = query.or(`action.ilike.${term},visitor_hash.ilike.${term}`);
-  }
+  if (search.trim()) query = query.ilike('action', `%${search.trim()}%`);
   if (severity) query = query.eq('severity', severity);
-  if (audience === 'visitors') query = query.not('visitor_hash', 'is', null);
-  if (audience === 'members') query = query.is('visitor_hash', null);
 
   const { data, error, count } = await query;
   if (error) throw toFriendlyError(error);
-  return { items: data || [], total: count || 0 };
+
+  let items = data || [];
+  if (audience === 'visitors') items = items.filter((row) => row.visitor_hash);
+  if (audience === 'members') items = items.filter((row) => !row.visitor_hash);
+
+  const ids = [...new Set(items.map((row) => row.user_id).filter(Boolean))];
+  if (ids.length) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, email, role')
+      .in('id', ids);
+    const byId = new Map((profiles || []).map((p) => [p.id, { email: p.email, role: p.role }]));
+    items = items.map((row) => asAuditRow({ ...row, actor: byId.get(row.user_id) || null }));
+  } else {
+    items = items.map(asAuditRow);
+  }
+
+  return { items, total: count || 0 };
 }
 
 export const purgeActivityLogs = (olderThanDays) =>

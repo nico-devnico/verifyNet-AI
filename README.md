@@ -155,6 +155,7 @@ Ouvrir le **SQL Editor** du projet Supabase et exécuter les migrations
 | `supabase/migrations/0002_admin_rpc.sql` | Fonctions d'administration, quotas, partage public |
 | `supabase/migrations/0003_audit_hardening.sql` | Scelle la piste d'audit |
 | `supabase/migrations/0004_visitor_visibility.sql` | Enregistre l'activité des visiteurs sans compte |
+| `supabase/migrations/0005_admin_visibility_fixes.sql` | Journal d'audit et analyses anonymes visibles dans la console |
 
 Les scripts sont idempotents : les rejouer ne détruit aucune donnée et
 n'écrase pas un réglage déjà personnalisé.

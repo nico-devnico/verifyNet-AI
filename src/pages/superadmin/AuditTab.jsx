@@ -196,7 +196,7 @@ export default function AuditTab() {
                       <span className="sa-audit-meta">
                         {row.visitor_hash
                           ? `Visiteur ${row.visitor_hash.slice(0, 8)}${row.ip_address ? ` · ${row.ip_address}` : ''}`
-                          : (row.actor?.email || 'Système')}
+                          : (row.actor?.email || row.actor_email || 'Système')}
                         {row.target_user_id && ' → cible modifiée'}
                       </span>
                     </span>
